@@ -20,6 +20,7 @@ add_library(graphics
     sprites.hpp sprites.cpp
     texture.hpp texture.cpp
     types.hpp
+    windowManager.hpp windowManager.cpp
 )
 
 target_link_libraries(

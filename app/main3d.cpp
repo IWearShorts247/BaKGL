@@ -26,6 +26,7 @@ extern "C" {
 #include "graphics/inputHandler.hpp"
 #include "graphics/guiRenderer.hpp"
 #include "graphics/canvasFramebuffer.hpp"
+#include "graphics/windowManager.hpp"
 #include "graphics/glfw.hpp"
 #include "graphics/renderer.hpp"
 #include "graphics/sprites.hpp"
@@ -316,6 +317,44 @@ int main(int argc, char** argv)
     // VSync (cheap; toggleable from config/menu). 1 = on, 0 = off.
     glfwSwapInterval(config.mGraphics.mVSync ? 1 : 0);
 
+    const auto ToGraphicsWindowMode = [](Config::WindowMode m)
+    {
+        switch (m)
+        {
+            case Config::WindowMode::BorderlessFullscreen: return Graphics::WindowMode::BorderlessFullscreen;
+            case Config::WindowMode::ExclusiveFullscreen: return Graphics::WindowMode::ExclusiveFullscreen;
+            case Config::WindowMode::Windowed: return Graphics::WindowMode::Windowed;
+        }
+        return Graphics::WindowMode::Windowed;
+    };
+    const auto windowMode = ToGraphicsWindowMode(config.mGraphics.mWindowMode);
+
+    // Finalize the integer canvas scale. For a fullscreen mode we fit the canvas to the
+    // target monitor: AutoScale picks the largest integer that fits; otherwise we clamp the
+    // requested UiScale so the canvas never exceeds the monitor (it would just get clipped).
+    if (windowMode != Graphics::WindowMode::Windowed)
+    {
+        auto* monitor = Graphics::WindowManager::MonitorAt(config.mGraphics.mMonitor);
+        if (const auto* vidMode = glfwGetVideoMode(monitor))
+        {
+            const int fitScale = Graphics::WindowManager::ComputeAutoScale(vidMode->width, vidMode->height);
+            const int chosen = config.mGraphics.mAutoScale ? fitScale : std::min(uiScale, fitScale);
+            guiScalar = static_cast<float>(chosen);
+            width = nativeWidth * guiScalar;
+            height = nativeHeight * guiScalar;
+            guiScaleInv = glm::vec2{1 / guiScalar, 1 / guiScalar};
+        }
+    }
+
+    // Owns runtime window-mode switching (never recreates the GL context). Constructed
+    // while still windowed so it captures the windowed geometry to restore later.
+    auto windowManager = Graphics::WindowManager{
+        window.get(),
+        static_cast<int>(width),
+        static_cast<int>(height)};
+    if (windowMode != Graphics::WindowMode::Windowed)
+        windowManager.Apply(windowMode, config.mGraphics.mMonitor);
+
     // Offscreen logical canvas (320x200 * UiScale). The whole frame renders here, then is
     // blitted centered into the window with black letterbox bars (integer scale => pixel-exact).
     auto canvas = Graphics::CanvasFramebuffer{
@@ -509,6 +548,12 @@ int main(int argc, char** argv)
     inputHandler.BindPress(GLFW_KEY_B, [&]{
         if (!Gui::TextInput::AnyFocused())
             guiRenderer.ToggleCrossfade();
+    });
+    // Alt+Enter: toggle borderless fullscreen <-> windowed (no GL context recreation).
+    inputHandler.BindPress(GLFW_KEY_ENTER, [&]{
+        if (glfwGetKey(window.get(), GLFW_KEY_LEFT_ALT) == GLFW_PRESS
+            || glfwGetKey(window.get(), GLFW_KEY_RIGHT_ALT) == GLFW_PRESS)
+            windowManager.ToggleFullscreen();
     });
     inputHandler.Bind(GLFW_KEY_BACKSPACE,   [&]{ if (root.OnKeyEvent(Gui::KeyPress{GLFW_KEY_BACKSPACE})){ ;} });
     inputHandler.BindCharacter([&](char character){ if(root.OnKeyEvent(Gui::Character{character})){ ;} });
