@@ -2,6 +2,7 @@ enable_testing()
 
 add_library(graphics
     IGuiElement.hpp IGuiElement.cpp
+    canvasFramebuffer.hpp canvasFramebuffer.cpp
     cube.hpp cube.cpp
     framebuffer.hpp framebuffer.cpp
     glfw.hpp glfw.cpp

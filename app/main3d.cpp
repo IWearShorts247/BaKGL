@@ -25,6 +25,7 @@ extern "C" {
 
 #include "graphics/inputHandler.hpp"
 #include "graphics/guiRenderer.hpp"
+#include "graphics/canvasFramebuffer.hpp"
 #include "graphics/glfw.hpp"
 #include "graphics/renderer.hpp"
 #include "graphics/sprites.hpp"
@@ -281,7 +282,10 @@ int main(int argc, char** argv)
     }
 
     bool showImgui = config.mGraphics.mEnableImGui;
-    auto guiScalar = config.mGraphics.mResolutionScale;
+    // Integer logical-canvas scale (320x200 * UiScale). UiScale is parsed with back-compat
+    // from the deprecated float ResolutionScale (see Config::LoadGraphics).
+    const auto uiScale = config.mGraphics.mUiScale;
+    auto guiScalar = static_cast<float>(uiScale);
 
     auto nativeWidth = 320.0f;
     auto nativeHeight = 200.0f;
@@ -308,6 +312,15 @@ int main(int argc, char** argv)
             ShowWindow(console, SW_HIDE);
     }
 #endif
+
+    // VSync (cheap; toggleable from config/menu). 1 = on, 0 = off.
+    glfwSwapInterval(config.mGraphics.mVSync ? 1 : 0);
+
+    // Offscreen logical canvas (320x200 * UiScale). The whole frame renders here, then is
+    // blitted centered into the window with black letterbox bars (integer scale => pixel-exact).
+    auto canvas = Graphics::CanvasFramebuffer{
+        static_cast<unsigned>(width),
+        static_cast<unsigned>(height)};
 
     auto spriteManager = Graphics::SpriteManager{};
     auto guiRenderer = Graphics::GuiRenderer{
@@ -503,12 +516,27 @@ int main(int argc, char** argv)
     Graphics::InputHandler::BindKeyboardToWindow(window.get(), inputHandler);
     Graphics::InputHandler::BindMouseToWindow(window.get(), inputHandler);
 
+    // Map a window-space cursor position onto the centered canvas. In windowed mode the
+    // window IS the canvas so the offset is zero; fullscreen/letterbox (Stage 2) makes it
+    // non-trivial, so route ALL cursor positions through here now.
+    //  - ToCanvasPx: window px -> canvas px (for 3D picking, which reads canvas pixels).
+    //  - ToLogical:  window px -> logical 320x200 (for GUI hit-testing).
+    // NB: mouse-scroll deltas must NOT be offset; they keep the plain 1/scale factor.
+    const auto ToCanvasPx = [&](glm::vec2 p) -> glm::vec2
+    {
+        int ww{}, wh{};
+        glfwGetWindowSize(window.get(), &ww, &wh);
+        const auto offset = glm::vec2{(ww - width) * 0.5f, (wh - height) * 0.5f};
+        return p - offset;
+    };
+    const auto ToLogical = [&](glm::vec2 p) -> glm::vec2 { return ToCanvasPx(p) * guiScaleInv; };
+
     inputHandler.BindMouse(
         GLFW_MOUSE_BUTTON_LEFT,
         [&](auto clickPos)
         {
             bool guiHandled = root.OnMouseEvent(
-                Gui::LeftMousePress{guiScaleInv * clickPos});
+                Gui::LeftMousePress{ToLogical(clickPos)});
             if (!guiHandled && InputAllowed())
             {
                 glDisable(GL_BLEND);
@@ -519,7 +547,7 @@ int main(int argc, char** argv)
                     gameRunner.mSystems->GetSprites(),
                     gameRunner.mSystems->GetDynamicRenderables(),
                     *cameraPtr);
-                const auto clickedId = renderer.GetClickedEntity(clickPos);
+                const auto clickedId = renderer.GetClickedEntity(ToCanvasPx(clickPos));
                 if (gameRunner.IsGridVisible() && gameRunner.HandleGridCellClick(clickedId))
                 {
                 }
@@ -532,7 +560,7 @@ int main(int argc, char** argv)
         [&](auto clickPos)
         {
             root.OnMouseEvent(
-                Gui::LeftMouseRelease{guiScaleInv * clickPos});
+                Gui::LeftMouseRelease{ToLogical(clickPos)});
         }
     );
 
@@ -541,12 +569,12 @@ int main(int argc, char** argv)
         [&](auto click)
         {
             root.OnMouseEvent(
-                Gui::RightMousePress{guiScaleInv * click});
+                Gui::RightMousePress{ToLogical(click)});
         },
         [&](auto click)
         {
             root.OnMouseEvent(
-                Gui::RightMouseRelease{guiScaleInv * click});
+                Gui::RightMouseRelease{ToLogical(click)});
         }
     );
 
@@ -554,7 +582,7 @@ int main(int argc, char** argv)
         [&](auto pos)
         {
             root.OnMouseEvent(
-                Gui::MouseMove{guiScaleInv * pos});
+                Gui::MouseMove{ToLogical(pos)});
         }
     );
 
@@ -664,7 +692,9 @@ int main(int argc, char** argv)
                 lightCamera);
             renderer.EndDepthMapDraw();
 
-            glViewport(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
+            // The depth pass unbound to the default framebuffer; bind the offscreen canvas
+            // for the main color pass (3D world + 2D GUI both render into it).
+            canvas.BindForDrawing();
             // Dark blue background
             glClearColor(ambient * 0.15f, ambient * 0.31f, ambient * 0.36f, 0.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -698,10 +728,23 @@ int main(int argc, char** argv)
                     true);
             }
         }
+        else
+        {
+            // No 3D world (e.g. main menu): still render the GUI into the canvas.
+            canvas.BindForDrawing();
+            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        }
 
         //// { *** Draw 2D GUI ***
         guiRenderer.UpdateCrossfade(static_cast<float>(deltaTime));
         guiRenderer.RenderGui(&root);
+
+        // Present the canvas: blit centered into the window with black letterbox bars.
+        // Drive the dest rect from the framebuffer size (DPI-safe), not the window size.
+        int framebufferWidth{}, framebufferHeight{};
+        glfwGetFramebufferSize(window.get(), &framebufferWidth, &framebufferHeight);
+        canvas.PresentToScreen(framebufferWidth, framebufferHeight);
 
         // { *** IMGUI START ***
         if (showImgui)

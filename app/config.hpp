@@ -15,9 +15,29 @@ struct Paths
     std::string mLuaMods{};
 };
 
+enum class WindowMode
+{
+    Windowed,
+    BorderlessFullscreen,
+    ExclusiveFullscreen,
+};
+
+// Parse/serialize the config string form. Unknown strings fall back to Windowed.
+WindowMode ParseWindowMode(const std::string& s);
+std::string ToString(WindowMode m);
+
 struct Graphics
 {
-    float mResolutionScale{4.0};
+    // Integer logical-canvas scale (320x200 * UiScale). Supersedes the deprecated
+    // float ResolutionScale; an old config with only ResolutionScale maps to
+    // UiScale = round(ResolutionScale). Menu offers 3..6; clamped to fit the monitor.
+    int mUiScale{4};
+    WindowMode mWindowMode{WindowMode::Windowed};
+    int mMonitor{0};        // glfw monitor index; 0 = primary
+    bool mAutoScale{true};  // fullscreen: largest integer scale that fits; else use mUiScale
+    bool mVSync{true};
+
+    float mResolutionScale{4.0}; // DEPRECATED: read for back-compat only
     bool mShadows{true};
     bool mEnableImGui{true};
     bool mDebugDisableFades{false};

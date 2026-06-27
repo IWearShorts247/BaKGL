@@ -6,6 +6,16 @@
         "GraphicsOverrides": ""
     },
     "Graphics": {
+        // Integer logical-canvas scale (320x200 * UiScale). 3..6 typical; clamped to monitor.
+        "UiScale": 4,
+        // "Windowed" | "BorderlessFullscreen" | "ExclusiveFullscreen"
+        "WindowMode": "Windowed",
+        "Fullscreen": {
+            "Monitor": 0,
+            "AutoScale": true
+        },
+        "VSync": true,
+        // DEPRECATED: kept for back-compat. If UiScale is absent it is derived from this.
         "ResolutionScale": 4.0,
         "EnableShadows": true,
         "EnableImGui": false,

@@ -2,11 +2,31 @@
 
 #include "com/json.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <iostream>
 #include <fstream>
 
 namespace Config {
+
+WindowMode ParseWindowMode(const std::string& s)
+{
+    if (s == "BorderlessFullscreen") return WindowMode::BorderlessFullscreen;
+    if (s == "ExclusiveFullscreen") return WindowMode::ExclusiveFullscreen;
+    return WindowMode::Windowed;
+}
+
+std::string ToString(WindowMode m)
+{
+    switch (m)
+    {
+        case WindowMode::BorderlessFullscreen: return "BorderlessFullscreen";
+        case WindowMode::ExclusiveFullscreen: return "ExclusiveFullscreen";
+        case WindowMode::Windowed: return "Windowed";
+    }
+    return "Windowed";
+}
 
 Paths LoadPaths(const nlohmann::json& config)
 {
@@ -31,6 +51,20 @@ Graphics LoadGraphics(const nlohmann::json& config)
     {
         const auto& c = config["Graphics"];
         graphics.mResolutionScale = c.value("ResolutionScale", 4.0);
+        // UiScale supersedes the deprecated float ResolutionScale. If a new config omits
+        // UiScale, derive it from ResolutionScale so old configs keep their scale.
+        graphics.mUiScale = c.contains("UiScale")
+            ? c.value("UiScale", 4)
+            : static_cast<int>(std::lround(graphics.mResolutionScale));
+        graphics.mUiScale = std::clamp(graphics.mUiScale, 1, 16);
+        graphics.mWindowMode = ParseWindowMode(c.value("WindowMode", std::string{"Windowed"}));
+        if (c.contains("Fullscreen"))
+        {
+            const auto& f = c["Fullscreen"];
+            graphics.mMonitor = f.value("Monitor", 0);
+            graphics.mAutoScale = f.value("AutoScale", true);
+        }
+        graphics.mVSync = c.value("VSync", true);
         graphics.mShadows = c.value("EnableShadows", true);
         graphics.mEnableImGui = c.value("EnableImGui", true);
         graphics.mDebugDisableFades = c.value("DebugDisableFades", false);
