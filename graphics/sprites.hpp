@@ -30,6 +30,11 @@ public:
     
     void LoadTexturesGL(const TextureStore& textures);
 
+    // Load a parallel "classic" array (same indexing/dims as the primary) for the
+    // crossfade toggle. Bound to texture unit 1 alongside the primary on unit 0.
+    void LoadCompanionTexturesGL(const TextureStore& textures);
+    bool HasCompanion() const { return mHasCompanion; }
+
     std::size_t size();
 
     auto GetRect() const
@@ -49,6 +54,8 @@ public:
     VertexArrayObject mVertexArray;
     GLBuffers mBuffers;
     TextureBuffer mTextureBuffer;
+    TextureBuffer mCompanionBuffer;
+    bool mHasCompanion;
     QuadStorage mObjects;
     std::vector<glm::vec2> mSpriteDimensions;
 };

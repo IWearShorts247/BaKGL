@@ -123,6 +123,7 @@ public:
     void ShowCamp(bool isInn, BAK::ShopStats* inn) override;
     void ShowCast(bool inCombat) override;
     void ShowFullMap() override;
+    void ToggleFollowRoad() override;
     void ShowGameStartMap() override;
     void ShowCureScreen(
         unsigned templeNumber,

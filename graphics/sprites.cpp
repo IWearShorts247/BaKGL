@@ -17,6 +17,8 @@ Sprites::Sprites() noexcept
     mVertexArray{},
     mBuffers{},
     mTextureBuffer{GL_TEXTURE_2D_ARRAY},
+    mCompanionBuffer{GL_TEXTURE_2D_ARRAY},
+    mHasCompanion{false},
     mObjects{},
     mSpriteDimensions{}
 {
@@ -24,7 +26,8 @@ Sprites::Sprites() noexcept
 
 Sprites::Sprites(Sprites&& other) noexcept
 :
-    mTextureBuffer{GL_TEXTURE_2D_ARRAY}
+    mTextureBuffer{GL_TEXTURE_2D_ARRAY},
+    mCompanionBuffer{GL_TEXTURE_2D_ARRAY}
 {
     (*this) = std::move(other);
 }
@@ -36,6 +39,8 @@ Sprites& Sprites::operator=(Sprites&& other) noexcept
     this->mVertexArray = std::move(other.mVertexArray);
     this->mBuffers = std::move(other.mBuffers);
     this->mTextureBuffer = std::move(other.mTextureBuffer);
+    this->mCompanionBuffer = std::move(other.mCompanionBuffer);
+    this->mHasCompanion = other.mHasCompanion;
     this->mObjects = other.mObjects;
     this->mSpriteDimensions = other.mSpriteDimensions;
     return *this;
@@ -46,6 +51,10 @@ void Sprites::BindGL() const
     mVertexArray.BindGL();
 
     // FIXME!!! blergh...
+    // Unit 1 = the crossfade "classic" array. Falls back to the primary array when
+    // there's no companion, so the shader's texture1 sampler is always complete.
+    glActiveTexture(GL_TEXTURE1);
+    (mHasCompanion ? mCompanionBuffer : mTextureBuffer).BindGL();
     glActiveTexture(GL_TEXTURE0);
     mTextureBuffer.BindGL();
 }
@@ -53,6 +62,9 @@ void Sprites::BindGL() const
 void Sprites::UnbindGL() const
 {
     mVertexArray.UnbindGL();
+    glActiveTexture(GL_TEXTURE1);
+    mCompanionBuffer.UnbindGL();
+    glActiveTexture(GL_TEXTURE0);
     mTextureBuffer.UnbindGL();
 }
 
@@ -92,6 +104,14 @@ void Sprites::LoadTexturesGL(const TextureStore& textures)
     mBuffers.BindArraysGL();
     
     UnbindGL();
+}
+
+void Sprites::LoadCompanionTexturesGL(const TextureStore& textures)
+{
+    mCompanionBuffer.LoadTexturesGL(
+        textures.GetTextures(),
+        textures.GetMaxDim());
+    mHasCompanion = true;
 }
 
 std::size_t Sprites::size()

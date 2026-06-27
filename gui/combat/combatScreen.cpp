@@ -195,6 +195,7 @@ void CombatScreen::HandleButton(unsigned buttonIndex)
             break;
         case mCastButton:
             mLogger.Debug() << "Cast\n";
+            mGuiManager.GetCombatManager().BeginSpellCast();
             break;
         case mRetreatButton:
             Retreat();

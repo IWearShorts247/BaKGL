@@ -11,6 +11,9 @@
 #include "bak/entityType.hpp"
 #include "bak/camera.hpp"
 #include "bak/combat/mechanics.hpp"
+#include "bak/constants.hpp"
+#include "bak/coordinates.hpp"
+#include "bak/roadNetwork.hpp"
 #include "bak/chapterTransitions.hpp"
 #include "bak/encounter/combat.hpp"
 #include "bak/encounter/encounter.hpp"
@@ -30,6 +33,7 @@
 #include "graphics/glm.hpp"
 #include "gui/guiManager.hpp"
 
+#include <cmath>
 #include <utility>
 #include <variant>
 
@@ -122,6 +126,10 @@ void GameRunner::LoadGame(std::string savePath, std::optional<BAK::Chapter> chap
 
 void GameRunner::LoadZoneData(BAK::ZoneNumber zone)
 {
+    // road-node indices are per-zone; drop any follow state on a zone change
+    mFollowingRoad = false;
+    mRoadNode.reset();
+    mPrevRoadNode.reset();
     mZoneData = std::make_unique<BAK::Zone>(zone.mValue);
     mZoneRenderData = std::make_unique<Graphics::RenderData>();
     mZoneRenderData->LoadData(
@@ -129,6 +137,100 @@ void GameRunner::LoadZoneData(BAK::ZoneNumber zone)
         mZoneData->mZoneTextures.GetMaxDim());
     LoadSystems();
     mCamera.SetGameLocation(mGameState.GetLocation());
+}
+
+// --- Road auto-following ---------------------------------------------------
+namespace {
+// A party within this distance (BAK units) of a road node is "on the road".
+constexpr float sRoadSnapRange = BAK::gTileSize * 1.5f;
+
+// Among a node's neighbours, the index best aligned with `facing` (GL xz, normalised).
+// If skip is set, that neighbour is excluded unless it is the only option.
+int BestNeighbour(
+    const std::vector<BAK::RoadNetwork::Node>& nodes,
+    unsigned node,
+    glm::vec2 facing,
+    std::optional<unsigned> skip)
+{
+    int best = -1;
+    float bestScore = -2.0f;
+    const bool onlyOne = nodes[node].mNeighbours.size() <= 1;
+    for (auto nb : nodes[node].mNeighbours)
+    {
+        if (skip && nb == *skip && !onlyOne) continue;
+        const glm::vec2 dir = glm::normalize(nodes[nb].mPos - nodes[node].mPos);
+        const float score = glm::dot(dir, facing);
+        if (score > bestScore) { bestScore = score; best = static_cast<int>(nb); }
+    }
+    return best;
+}
+}
+
+void GameRunner::ToggleFollowRoad()
+{
+    if (mFollowingRoad)
+    {
+        mFollowingRoad = false;
+        mRoadNode.reset();
+        mPrevRoadNode.reset();
+        return;
+    }
+    if (!mZoneData || mZoneData->mRoadNetwork.Empty()) return;
+    const auto party = mCamera.GetGameLocation().mPosition;
+    const glm::vec2 partyGl{static_cast<float>(party.x), -static_cast<float>(party.y)};
+    const auto node = mZoneData->mRoadNetwork.FindNearestNode(partyGl, sRoadSnapRange);
+    if (!node) return; // not near a road
+    mFollowingRoad = true;
+    SnapOntoRoad(*node);
+}
+
+void GameRunner::SnapOntoRoad(unsigned node)
+{
+    const auto& nodes = mZoneData->mRoadNetwork.GetNodes();
+    const auto fwd = mCamera.GetForward();
+    glm::vec2 facing{fwd.x, fwd.z};
+    if (glm::length(facing) > 0.f) facing = glm::normalize(facing);
+
+    BAK::GameHeading heading = mCamera.GetHeading();
+    const int best = BestNeighbour(nodes, node, facing, std::nullopt);
+    if (best != -1)
+    {
+        const glm::vec2 dir = nodes[best].mPos - nodes[node].mPos;
+        heading = BAK::ToBakAngle(std::atan2(dir.x, dir.y));
+    }
+    const BAK::GamePosition pos{
+        static_cast<unsigned>(nodes[node].mPos.x),
+        static_cast<unsigned>(-nodes[node].mPos.y)};
+    mCamera.SetGameLocation({pos, heading});
+    mRoadNode = node;
+    mPrevRoadNode.reset();
+    mGuiManager.mMainView.SetHeading(mCamera.GetHeading());
+}
+
+void GameRunner::FollowRoadStep(bool forward)
+{
+    if (!mFollowingRoad || !mRoadNode || !mZoneData) return;
+    const auto& nodes = mZoneData->mRoadNetwork.GetNodes();
+    const unsigned cur = *mRoadNode;
+
+    const auto fwd = mCamera.GetForward();
+    glm::vec2 facing = forward ? glm::vec2{fwd.x, fwd.z} : glm::vec2{-fwd.x, -fwd.z};
+    if (glm::length(facing) > 0.f) facing = glm::normalize(facing);
+
+    // Prefer not to immediately backtrack; at a dead-end, allow turning around.
+    int best = BestNeighbour(nodes, cur, facing, mPrevRoadNode);
+    if (best == -1) best = BestNeighbour(nodes, cur, facing, std::nullopt);
+    if (best == -1) return;
+
+    const glm::vec2 dir = nodes[best].mPos - nodes[cur].mPos;
+    const BAK::GameHeading heading = BAK::ToBakAngle(std::atan2(dir.x, dir.y));
+    const BAK::GamePosition pos{
+        static_cast<unsigned>(nodes[best].mPos.x),
+        static_cast<unsigned>(-nodes[best].mPos.y)};
+    mCamera.SetGameLocation({pos, heading});
+    mPrevRoadNode = cur;
+    mRoadNode = static_cast<unsigned>(best);
+    mGuiManager.mMainView.SetHeading(mCamera.GetHeading());
 }
 
 void GameRunner::DoTransition(
@@ -309,6 +411,7 @@ void GameRunner::LoadSystems()
     mGridVisible = false;
     mGridCellRenderables.clear();
     mGridCellEntityIds.clear();
+    mGridHighlights.clear();
 }
 
 void GameRunner::LoadTileActors(std::uint8_t tileIndex)
@@ -736,18 +839,26 @@ void GameRunner::CheckClickable(unsigned entityId)
     }
 }
 
+void GameRunner::RequestCombatExit(BAK::CombatResult result)
+{
+    // Called from inside a combat animation callback (the killing blow). Defer the
+    // actual teardown to OnTimeDelta, which runs after the animator iteration.
+    if (!mPendingCombatResult)
+    {
+        mPendingCombatResult = result;
+    }
+}
+
 void GameRunner::OnTimeDelta(double timeDelta)
 {
-    return;
-    mAccumulatedTime += timeDelta;
-    if (mAccumulatedTime > .5)
+    // Deferred combat exit. main3d calls this immediately after guiManager.OnTimeDelta
+    // (which ticks the combat animators), so PopScreen/ClearCombatActors here run safely
+    // outside the animator iteration that requested the exit.
+    if (mPendingCombatResult)
     {
-        mAccumulatedTime = 0;
-        for (auto& actor : mCombatActorStore.GetActors())
-        {
-            actor.mFrame += 1;
-            actor.Update();
-        }
+        const auto result = *mPendingCombatResult;
+        mPendingCombatResult.reset();
+        mGuiManager.ExitCombat(result);
     }
 }
 
@@ -778,6 +889,7 @@ void GameRunner::ShowGrid(const BAK::GamePositionAndHeading& orientation)
     if (!mSystems || !mZoneData)
         return;
 
+    mCombatOrientation = orientation;
     auto gridRotation = BAK::ToGlAngle(orientation.mHeading).x;
 
     for (unsigned row = 0; row < BAK::gCombatGridRows; row++)
@@ -789,10 +901,21 @@ void GameRunner::ShowGrid(const BAK::GamePositionAndHeading& orientation)
             auto glPos = BAK::ToGlCoord<float>(worldPos)
                 + glm::vec3{0, 1.0f, 0};
 
+            // Colour the cell by its highlight state for the current turn.
+            const char* cellObject = "GridCell";
+            const auto idx = row * BAK::gCombatGridCols + col;
+            if (idx < mGridHighlights.size())
+            {
+                if (mGridHighlights[idx] == Game::Combat::GridHighlight::Attackable)
+                    cellObject = "GridCellAttack";
+                else if (mGridHighlights[idx] == Game::Combat::GridHighlight::Reachable)
+                    cellObject = "GridCellMove";
+            }
+
             auto id = mSystems->GetNextItemId();
             mGridCellRenderables.emplace_back(Renderable{
                 id,
-                mZoneData->mObjects.GetObject("GridCell"),
+                mZoneData->mObjects.GetObject(cellObject),
                 glPos,
                 glm::vec3{0, gridRotation, 0},
                 glm::vec3{BAK::gCombatGridCellSize, 1, BAK::gCombatGridCellSize} / BAK::gWorldScale});
@@ -802,6 +925,17 @@ void GameRunner::ShowGrid(const BAK::GamePositionAndHeading& orientation)
     }
     mGridVisible = true;
     mLogger.Debug() << "Grid shown\n";
+}
+
+void GameRunner::SetGridHighlights(const std::vector<Game::Combat::GridHighlight>& cells)
+{
+    // Rebuild the grid cells at the same positions with the new per-cell colours.
+    mGridHighlights = cells;
+    if (mGridVisible)
+    {
+        HideGrid();
+        ShowGrid(mCombatOrientation);
+    }
 }
 
 void GameRunner::HideGrid()

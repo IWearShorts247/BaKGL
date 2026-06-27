@@ -3,6 +3,7 @@
 #include "bak/container.hpp"
 #include "bak/palette.hpp"
 #include "bak/resourceNames.hpp"
+#include "bak/roadNetwork.hpp"
 #include "bak/worldFactory.hpp"
 
 #include "graphics/meshObject.hpp"
@@ -23,6 +24,7 @@ public:
     ZoneTextureStore mZoneTextures;
     ZoneItemStore mZoneItems;
     WorldTileStore mWorldTiles;
+    RoadNetwork mRoadNetwork;
     Graphics::MeshObjectStorage mObjects;
 };
 

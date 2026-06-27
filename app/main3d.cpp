@@ -30,6 +30,7 @@ extern "C" {
 #include "graphics/sprites.hpp"
 
 #include "gui/guiManager.hpp"
+#include "gui/textInput.hpp"
 #include "gui/window.hpp"
 
 #include "imgui/imguiWrapper.hpp"
@@ -39,8 +40,13 @@ extern "C" {
 #include <GLFW/glfw3.h>
 
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <functional>
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 #include <memory>
 #include <numbers>
 #include <sstream>
@@ -118,6 +124,9 @@ Config::Config LoadConfigFile(std::string configPath)
 
     const auto defaultConfig = (Paths::Get().GetBakDirectoryPath() / "config.json").string();
     const auto currentDirectoryConfig = "config.json";
+    // Also look next to the executable so a shipped package finds its config.json
+    // regardless of the working directory (e.g. Windows double-click).
+    const auto exeDirConfig = (GetExecutableDirectory() / "config.json").string();
 
     if (!configPath.empty())
     {
@@ -126,6 +135,10 @@ Config::Config LoadConfigFile(std::string configPath)
     else if (std::filesystem::exists(currentDirectoryConfig))
     {
         TryLoad(currentDirectoryConfig);
+    }
+    else if (std::filesystem::exists(exeDirConfig))
+    {
+        TryLoad(exeDirConfig);
     }
     else if (std::filesystem::exists(defaultConfig))
     {
@@ -141,6 +154,23 @@ Config::Config LoadConfigFile(std::string configPath)
 
 int main(int argc, char** argv)
 {
+    // NOTE (Windows): the NVIDIA GL driver's context creation (inside glfwCreateWindow) HANGS if the
+    // process has no console attached, AND a present-but-hidden console is NOT enough (tested) — the
+    // console must be present & visible THROUGH context creation. So this is built console-subsystem
+    // (console exists from startup), and we hide that console only AFTER the window is up — see the
+    // HideOwnConsole() call after MakeGlfwWindow below.
+
+    // Anchor the working directory to the executable's location before anything else.
+    // Explorer double-click launches with CWD = system dir (not the game folder), whereas a
+    // CLI launch runs from the folder; without this, CWD-relative resource lookups (config,
+    // data, overrides) crash on double-click but work from the CLI. This makes them identical.
+    {
+        std::error_code ec{};
+        const auto exeDir = GetExecutableDirectory();
+        if (!exeDir.empty())
+            std::filesystem::current_path(exeDir, ec);
+    }
+
     const auto options = Parse(argc, argv);
     const auto config = LoadConfigFile(options.configFile);
     Logging::LogState::SetLogTime(config.mLogging.mLogTime);
@@ -164,13 +194,23 @@ int main(int argc, char** argv)
         std::cout << "Will log to file: " << logFilePath << "\n";
         auto logDirectory = logFilePath;
         logDirectory.remove_filename();
+        std::error_code dirEc{};
         if (!std::filesystem::exists(logDirectory))
         {
-            std::cerr << "Log file directory: " << logDirectory << " does not exist, will not log to file!\n";
+            // spike: create the bak directory on first run rather than silently
+            // disabling file logging (it's also where saves/log live)
+            std::filesystem::create_directories(logDirectory, dirEc);
+        }
+        if (!std::filesystem::exists(logDirectory))
+        {
+            std::cerr << "Log file directory: " << logDirectory << " does not exist (" << dirEc.message() << "), will not log to file!\n";
         }
         else
         {
             logFileStream = std::make_unique<std::ofstream>(logFilePath.string(), std::ios::out);
+            // Flush every write so the log is complete even if the process is killed or
+            // hangs (needed to diagnose no-console / double-click launches).
+            logFileStream->setf(std::ios::unitbuf);
             if (!logFileStream->is_open())
             {
                 std::cerr << "Could not open log file: " << logFilePath << ", will not log to file!\n";
@@ -199,7 +239,12 @@ int main(int argc, char** argv)
 
     if (!config.mPaths.mGraphicsOverrides.empty())
     {
-        Paths::Get().SetModDirectory(config.mPaths.mGraphicsOverrides);
+        // Resolve a relative override dir against the executable's location so a shipped
+        // package (exe + overrides/ side by side) works regardless of working directory.
+        std::filesystem::path overrides{config.mPaths.mGraphicsOverrides};
+        if (overrides.is_relative())
+            overrides = GetExecutableDirectory() / overrides;
+        Paths::Get().SetModDirectory(overrides.string());
     }
 
     {
@@ -251,6 +296,18 @@ int main(int argc, char** argv)
         height,
         width,
         "BaK");
+
+#if defined(_WIN32)
+    // The GL window/context now exists, so the console has served its purpose (see the NOTE at the
+    // top of main). Hide it — but ONLY if it's our own console (double-click spawns a dedicated
+    // one). If we were launched from a shell, the console is shared with a parent process; leave it.
+    if (HWND console = GetConsoleWindow(); console != nullptr)
+    {
+        DWORD pids[2]{};
+        if (GetConsoleProcessList(pids, 2) == 1)
+            ShowWindow(console, SW_HIDE);
+    }
+#endif
 
     auto spriteManager = Graphics::SpriteManager{};
     auto guiRenderer = Graphics::GuiRenderer{
@@ -359,10 +416,31 @@ int main(int argc, char** argv)
         if (guiManager.InMainView())
             UpdateLightCamera();
     });
-    inputHandler.Bind(GLFW_KEY_UP,   [&]{ if (InputAllowed()){cameraPtr->StrafeForward(); UpdateGameTile();}});
-    inputHandler.Bind(GLFW_KEY_DOWN, [&]{ if (InputAllowed()){cameraPtr->StrafeBackward(); UpdateGameTile();}});
-    inputHandler.Bind(GLFW_KEY_LEFT, [&]{ if (InputAllowed()){cameraPtr->StrafeLeft(); UpdateGameTile();}});
-    inputHandler.Bind(GLFW_KEY_RIGHT,[&]{ if (InputAllowed()){cameraPtr->StrafeRight(); UpdateGameTile();}});
+    // Forward/back: when following a road, step along it instead of free movement.
+    inputHandler.Bind(GLFW_KEY_UP,   [&]{ if (InputAllowed()){
+        if (gameRunner.IsFollowingRoad()) gameRunner.FollowRoadStep(true);
+        else cameraPtr->StrafeForward();
+        UpdateGameTile();}});
+    inputHandler.Bind(GLFW_KEY_DOWN, [&]{ if (InputAllowed()){
+        if (gameRunner.IsFollowingRoad()) gameRunner.FollowRoadStep(false);
+        else cameraPtr->StrafeBackward();
+        UpdateGameTile();}});
+    // Toggle road auto-following (also on the HUD "snap to road" button).
+    inputHandler.Bind(GLFW_KEY_F, [&]{ if (InputAllowed()) gameRunner.ToggleFollowRoad(); });
+    // Left/Right arrows TURN the party (like the original game), matching the Q/E rotate path.
+    // (Sideways strafe remains available on A/D.)
+    inputHandler.Bind(GLFW_KEY_LEFT, [&]{
+        if (InputAllowed())
+        {
+            cameraPtr->RotateLeft();
+            guiManager.mMainView.SetHeading(cameraPtr->GetHeading());
+        }});
+    inputHandler.Bind(GLFW_KEY_RIGHT,[&]{
+        if (InputAllowed())
+        {
+            cameraPtr->RotateRight();
+            guiManager.mMainView.SetHeading(cameraPtr->GetHeading());
+        }});
 
     inputHandler.Bind(GLFW_KEY_W, [&]{ if (InputAllowed()){cameraPtr->MoveForward(); UpdateGameTile();}});
     inputHandler.Bind(GLFW_KEY_A, [&]{ if (InputAllowed()){cameraPtr->StrafeLeft(); UpdateGameTile();}});
@@ -385,6 +463,23 @@ int main(int argc, char** argv)
     inputHandler.Bind(GLFW_KEY_X, [&]{ if (InputAllowed()) cameraPtr->RotateVerticalUp(); });
     inputHandler.Bind(GLFW_KEY_Y, [&]{ if (InputAllowed()) cameraPtr->RotateVerticalDown(); });
     inputHandler.Bind(GLFW_KEY_C, [&]{ if (guiManager.InMainView()) gameRunner.mGameState.Apply(BAK::State::ClearTileRecentEncounters); });
+    // Combat: 'T' toggles the player's melee attack type (swing <-> thrust).
+    inputHandler.Bind(GLFW_KEY_T, [&]{
+        if (guiManager.InCombatView())
+        {
+            auto& cm = guiManager.GetCombatManager();
+            cm.SetMeleeAttackType(
+                cm.GetMeleeAttackType() == BAK::Combat::MeleeAttackType::Swing
+                    ? BAK::Combat::MeleeAttackType::Thrust
+                    : BAK::Combat::MeleeAttackType::Swing);
+        }
+    });
+    // Combat: Space ends the current combatant's turn (pass, e.g. after moving without
+    // attacking). A move no longer auto-ends the turn (multi-step move-then-attack).
+    inputHandler.Bind(GLFW_KEY_SPACE, [&]{
+        if (guiManager.InCombatView() && !gameRunner.IsAnimationActive())
+            guiManager.GetCombatManager().EndTurn();
+    });
     inputHandler.Bind(GLFW_KEY_I, [&]{ 
         if (!imGuiInitialised)
         {
@@ -394,6 +489,14 @@ int main(int argc, char** argv)
         showImgui = !showImgui;
     });
 
+    // Toggle the classic/remastered art crossfade (MI:SE style). Edge-triggered
+    // (BindPress) so one tap = one toggle — Bind() repeats every frame held and
+    // would oscillate the target into a stuck half-blend. Gated so typing into a
+    // text field (e.g. a save-game name) doesn't trip it.
+    inputHandler.BindPress(GLFW_KEY_B, [&]{
+        if (!Gui::TextInput::AnyFocused())
+            guiRenderer.ToggleCrossfade();
+    });
     inputHandler.Bind(GLFW_KEY_BACKSPACE,   [&]{ if (root.OnKeyEvent(Gui::KeyPress{GLFW_KEY_BACKSPACE})){ ;} });
     inputHandler.BindCharacter([&](char character){ if(root.OnKeyEvent(Gui::Character{character})){ ;} });
 
@@ -597,6 +700,7 @@ int main(int argc, char** argv)
         }
 
         //// { *** Draw 2D GUI ***
+        guiRenderer.UpdateCrossfade(static_cast<float>(deltaTime));
         guiRenderer.RenderGui(&root);
 
         // { *** IMGUI START ***

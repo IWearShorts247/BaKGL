@@ -6,6 +6,21 @@
 
 namespace Gui {
 
+int TextInput::sFocusCount = 0;
+
+bool TextInput::AnyFocused()
+{
+    return sFocusCount > 0;
+}
+
+TextInput::~TextInput()
+{
+    // Don't leak the focus count if a focused field is destroyed (e.g. the save
+    // screen closing without explicitly defocusing).
+    if (mHaveFocus && sFocusCount > 0)
+        --sFocusCount;
+}
+
 TextInput::TextInput(
     const Font& font,
     glm::vec2 pos,
@@ -62,6 +77,8 @@ const std::string& TextInput::GetText() const
 
 void TextInput::SetFocus(bool focus)
 {
+    if (focus != mHaveFocus)
+        sFocusCount += focus ? 1 : -1;
     mHaveFocus = focus;
     if (!mHaveFocus)
     {

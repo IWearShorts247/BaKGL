@@ -122,6 +122,9 @@ void MainView::HandleButton(unsigned buttonIndex)
     case sFullMap:
         mGuiManager.ShowFullMap();
         break;
+    case sSnapToRoad:
+        mGuiManager.ToggleFollowRoad();
+        break;
     case sBookmark:
         mShowingBookmarkDialog = true;
         mNeedRefresh = true;

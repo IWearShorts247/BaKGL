@@ -4,6 +4,7 @@
 
 #include <GL/glew.h>
 
+#include <algorithm>
 #include <cmath>
 
 namespace Graphics {
@@ -97,15 +98,41 @@ GuiRenderer::GuiRenderer(
     },
     mBlockColorId{mShader.GetUniformLocation("blockColor")},
     mColorModeId{mShader.GetUniformLocation("colorMode")},
+    mCrossfadeId{mShader.GetUniformLocation("uCrossfade")},
+    mHasCrossfadeId{mShader.GetUniformLocation("uHasCrossfade")},
+    mCrossfade{0.0f},
+    mCrossfadeTarget{0.0f},
     mRenderCalls{0},
     mLogger{Logging::LogState::GetLogger("GuiRenderer")}
-{}
+{
+    // Bind the two samplers to texture units 0 (remastered) and 1 (classic).
+    mShader.UseProgramGL();
+    mShader.SetUniform(mShader.GetUniformLocation("texture0"), 0);
+    mShader.SetUniform(mShader.GetUniformLocation("texture1"), 1);
+}
+
+void GuiRenderer::ToggleCrossfade()
+{
+    mCrossfadeTarget = mCrossfadeTarget > 0.5f ? 0.0f : 1.0f;
+}
+
+void GuiRenderer::UpdateCrossfade(float deltaSeconds)
+{
+    // ~0.4s sweep, matching MI:SE's quick classic/remastered morph.
+    constexpr float speed = 2.5f;
+    const float step = speed * deltaSeconds;
+    if (mCrossfade < mCrossfadeTarget)
+        mCrossfade = std::min(mCrossfadeTarget, mCrossfade + step);
+    else if (mCrossfade > mCrossfadeTarget)
+        mCrossfade = std::max(mCrossfadeTarget, mCrossfade - step);
+}
 
 void GuiRenderer::RenderGui(
     Graphics::IGuiElement* element)
 {
     glDisable(GL_DEPTH_TEST);
     mShader.UseProgramGL();
+    mShader.SetUniform(mCrossfadeId, Float{mCrossfade});
 
     mRenderCalls = 0;
     mLogger.Spam() << "Beginning Render\n";
@@ -140,6 +167,8 @@ void GuiRenderer::RenderGuiImpl(
     else
     {
         mSpriteManager.ActivateSpriteSheet(di.mSpriteSheet);
+        mShader.SetUniform(mHasCrossfadeId,
+            mSpriteManager.GetSpriteSheet(di.mSpriteSheet).HasCompanion() ? 1 : 0);
 
         const auto rotation = glm::mat4{
             cosf(pi.mRotation), -sinf(pi.mRotation), 0, 0, 

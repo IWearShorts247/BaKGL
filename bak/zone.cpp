@@ -65,6 +65,7 @@ Zone::Zone(unsigned zoneNumber)
     mZoneTextures{mZoneLabel},
     mZoneItems{mZoneLabel, mZoneTextures},
     mWorldTiles{mZoneItems, BAK::Encounter::EncounterFactory{}},
+    mRoadNetwork{mWorldTiles},
     mObjects{}
 {
     for (auto& item : mZoneItems.GetItems())
@@ -84,39 +85,48 @@ Zone::Zone(unsigned zoneNumber)
     const auto click = Graphics::Cuboid{1, 1, 50};
     mObjects.AddObject("clickable", click.ToMeshObject(glm::vec4{1.0, 0, 0, .3}));
 
-    // Grid visualization texture
+    // Grid visualization textures. The same bordered-cell shape in several colours:
+    // a neutral grid plus combat highlights (reachable / attackable), with a stronger
+    // interior wash so highlighted cells stand out from the plain grid.
     {
-        auto gridTex = Graphics::Texture{sGridTexSize, sGridTexSize, sGridTexSize, sGridTexSize};
-        for (unsigned y = 0; y < sGridTexSize; y++)
+        auto makeGridCell = [&](glm::vec3 color, float interiorFill)
         {
-            for (unsigned x = 0; x < sGridTexSize; x++)
+            auto gridTex = Graphics::Texture{sGridTexSize, sGridTexSize, sGridTexSize, sGridTexSize};
+            for (unsigned y = 0; y < sGridTexSize; y++)
             {
-                const auto d = std::min(
-                    std::min(x, sGridTexSize - 1 - x),
-                    std::min(y, sGridTexSize - 1 - y));
+                for (unsigned x = 0; x < sGridTexSize; x++)
+                {
+                    const auto d = std::min(
+                        std::min(x, sGridTexSize - 1 - x),
+                        std::min(y, sGridTexSize - 1 - y));
 
-                float alpha = 0.0f;
-                if (d < sGridFadePixels)
-                {
-                    const float t = static_cast<float>(d) / sGridFadePixels;
-                    alpha = t * t;
-                }
-                else if (d < sGridFadePixels + sGridBorderThick)
-                {
-                    alpha = 1.0f;
-                }
-                else if (d < sGridBorderTotal)
-                {
-                    const float t = static_cast<float>(sGridBorderTotal - d) / sGridFadePixels;
-                    alpha = t * t;
-                }
+                    float borderAlpha = 0.0f;
+                    if (d < sGridFadePixels)
+                    {
+                        const float t = static_cast<float>(d) / sGridFadePixels;
+                        borderAlpha = t * t;
+                    }
+                    else if (d < sGridFadePixels + sGridBorderThick)
+                    {
+                        borderAlpha = 1.0f;
+                    }
+                    else if (d < sGridBorderTotal)
+                    {
+                        const float t = static_cast<float>(sGridBorderTotal - d) / sGridFadePixels;
+                        borderAlpha = t * t;
+                    }
 
-                gridTex.SetPixel(x, y, glm::vec4{0.0f, 0.7f, 0.5f, alpha + 0.03});
+                    gridTex.SetPixel(x, y, glm::vec4{color, std::max(borderAlpha, interiorFill)});
+                }
             }
-        }
-        const auto gridLayer = mZoneTextures.GetTextures().size();
-        mZoneTextures.AddTexture(gridTex);
-        mObjects.AddObject("GridCell", MakeGridQuadMesh(gridLayer));
+            const auto gridLayer = mZoneTextures.GetTextures().size();
+            mZoneTextures.AddTexture(gridTex);
+            return MakeGridQuadMesh(gridLayer);
+        };
+
+        mObjects.AddObject("GridCell",       makeGridCell(glm::vec3{0.0f, 0.7f, 0.5f}, 0.03f)); // neutral teal
+        mObjects.AddObject("GridCellMove",   makeGridCell(glm::vec3{0.2f, 0.5f, 1.0f}, 0.14f)); // reachable blue
+        mObjects.AddObject("GridCellAttack", makeGridCell(glm::vec3{1.0f, 0.2f, 0.2f}, 0.22f)); // attackable red
     }
 }
 

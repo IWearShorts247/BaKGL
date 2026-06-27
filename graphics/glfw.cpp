@@ -41,7 +41,12 @@ std::unique_ptr<GLFWwindow, DestroyGlfwWindow> MakeGlfwWindow(
     std::string_view title)
 {
     const auto logger = Logging::LogState::GetLogger("GLFW");
-    glfwSetErrorCallback([](int error, const char* desc){ puts(desc); });
+    // Route GLFW errors to the log (puts() writes to stdout, which is an invalid handle on a
+    // no-console double-click launch).
+    glfwSetErrorCallback([](int error, const char* desc){
+        Logging::LogState::GetLogger("GLFW").Error()
+            << "GLFW error " << error << ": " << (desc ? desc : "(null)") << std::endl;
+    });
 
     if( !glfwInit() )
     {
@@ -51,7 +56,8 @@ std::unique_ptr<GLFWwindow, DestroyGlfwWindow> MakeGlfwWindow(
 
     GLFWwindow* window{nullptr};
 
-    constexpr auto antiAliasingSamples = 4;
+    // MSAA (was 4) is currently disabled — see win-build notes. Candidate config option.
+    constexpr auto antiAliasingSamples = 0;
     glfwWindowHint(GLFW_SAMPLES, antiAliasingSamples);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);

@@ -13,6 +13,8 @@ public:
     // Load zone based on zone info in DEF_ZONE.DAT
     virtual void DoTeleport(BAK::Encounter::Teleport) = 0;
     virtual void LoadGame(std::string, std::optional<Chapter>) = 0;
+    // Toggle road auto-following (HUD "snap to road" button). Default no-op.
+    virtual void ToggleFollowRoad() {}
 };
 
 }

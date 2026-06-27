@@ -36,6 +36,12 @@ void InputHandler::Bind(int key, KeyCallback&& callback)
     mKeyBindings.emplace(key, std::move(callback));
 }
 
+void InputHandler::BindPress(int key, KeyCallback&& callback)
+{
+    mKeyPressBindings.emplace(key, std::move(callback));
+    mKeyPressState.emplace(key, false);
+}
+
 void InputHandler::BindCharacter(CharacterCallback&& callback)
 {
     mCharacterCallback = std::move(callback);
@@ -69,6 +75,16 @@ void InputHandler::HandleInput(GLFWwindow* window)
             {
                 std::invoke(keyVal.second);
             }
+        }
+
+        // Edge-triggered bindings: fire only on the down transition.
+        for (auto& keyVal : mKeyPressBindings)
+        {
+            const bool down = glfwGetKey(window, keyVal.first) == GLFW_PRESS;
+            bool& wasDown = mKeyPressState[keyVal.first];
+            if (down && !wasDown)
+                std::invoke(keyVal.second);
+            wasDown = down;
         }
     }
 }

@@ -60,6 +60,11 @@ public:
     void RenderGui(
         Graphics::IGuiElement* element);
 
+    // Classic/remastered crossfade (0 = remastered art, 1 = classic original).
+    void ToggleCrossfade();
+    void UpdateCrossfade(float deltaSeconds);
+    float GetCrossfade() const { return mCrossfade; }
+
 //private:
     void RenderGuiImpl(
         glm::vec2 translate,
@@ -81,6 +86,12 @@ public:
     // These are straight from the shader...
     GLuint mBlockColorId;
     GLuint mColorModeId;
+    GLuint mCrossfadeId;
+    GLuint mHasCrossfadeId;
+
+    // Crossfade state: mCrossfade eases toward mCrossfadeTarget each frame.
+    float mCrossfade;
+    float mCrossfadeTarget;
 
     unsigned mRenderCalls;
 

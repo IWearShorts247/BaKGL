@@ -36,6 +36,14 @@ if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.30")
     cmake_policy(SET CMP0169 OLD)
 endif()
 
+if (MINGW)
+    # REQUIRED: build console-subsystem on Windows. The NVIDIA GL driver's context creation hangs
+    # if the process has no console attached (e.g. a GUI-subsystem exe double-clicked from
+    # Explorer). main3d hides its own console once the window is up (see app/main3d.cpp). See
+    # _remaster/win-build for the full diagnosis.
+    add_link_options(-mconsole)
+endif()
+
 if (MSVC)
     # Statically link MSVC runtime
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -93,7 +101,7 @@ list(APPEND CMAKE_PREFIX_PATH "C:/Program Files/Common Files/MSVC/glew-2.1.0")
 # --- OpenGL related packages --- #
 set(OpenGL_GL_PREFERENCE GLVND)
 find_package(OpenGL REQUIRED)
-find_package(GLUT REQUIRED)
+find_package(GLUT) # spike: GLUT unused in code; not REQUIRED for cross-build
 find_package(GLEW REQUIRED)
 
 if (TARGET GLEW::glew AND NOT GLEW_LIBRARIES)
@@ -215,6 +223,19 @@ endif()
 if(NOT TARGET SDL2::SDL2main)
     message ("Didn't find SDL2::SDL2main, adding dummy target")
     add_library(SDL2::SDL2main ALIAS SDL2::SDL2)
+endif()
+
+# spike (mingw cross): the executables provide their own main() and use GLFW for
+# windowing, so we don't want SDL2's WinMain entry. SDL2's mingw config injects
+# -Wl,--undefined=WinMain on every exe linking SDL2::SDL2, which drags in SDL2main
+# and breaks the link. Strip it and tell SDL we handle main ourselves.
+if (WIN32)
+    add_compile_definitions(SDL_MAIN_HANDLED)
+    foreach (sdl_tgt SDL2::SDL2 SDL2::SDL2main)
+        if (TARGET ${sdl_tgt})
+            set_target_properties(${sdl_tgt} PROPERTIES INTERFACE_LINK_OPTIONS "")
+        endif()
+    endforeach()
 endif()
 
 # --- AudioCodecs for SDLMixerX --- #

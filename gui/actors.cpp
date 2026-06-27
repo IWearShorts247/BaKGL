@@ -23,6 +23,8 @@ Actors::Actors(
     mLogger{Logging::LogState::GetLogger("Gui::Actors")}
 {
     auto textures = Graphics::TextureStore{};
+    // Parallel "classic" art array (index-aligned with `textures`) for the crossfade.
+    auto classicTextures = Graphics::TextureStore{};
 
     unsigned textureIndex = 0;
     for (unsigned i = 1; i < 54; i++)
@@ -43,8 +45,8 @@ Actors::Actors(
             std::stringstream bmx{};
             bmx << actN.str() << ".BMX";
             mLogger.Spam() << "Loading: " << bmx.str() << " " << pal.str() << std::endl;
-            BAK::TextureFactory::AddToTextureStore(
-                textures, bmx.str(), pal.str());
+            BAK::TextureFactory::AddToTextureStoreCrossfade(
+                textures, classicTextures, bmx.str(), pal.str());
             const auto dims = textures.GetTexture(textureIndex).GetDims();
             mActorDimensions.emplace_back(std::make_pair(textureIndex, dims));
             textureIndex++;
@@ -57,8 +59,8 @@ Actors::Actors(
             std::stringstream bmx{};
             bmx << actN.str() << ".BMX";
             mLogger.Spam() << "Loading alternate: " << bmx.str() << " " << pal.str() << std::endl;
-            BAK::TextureFactory::AddToTextureStore(
-                textures, bmx.str(), pal.str());
+            BAK::TextureFactory::AddToTextureStoreCrossfade(
+                textures, classicTextures, bmx.str(), pal.str());
             const auto dims = textures.GetTexture(textureIndex).GetDims();
             mActorADimensions.emplace(
                 i,
@@ -69,6 +71,7 @@ Actors::Actors(
 
     auto& spriteSheet = spriteManager.GetSpriteSheet(mSpriteSheet);
     spriteSheet.LoadTexturesGL(textures);
+    spriteSheet.LoadCompanionTexturesGL(classicTextures);
 }
 
 Graphics::SpriteSheetIndex Actors::GetSpriteSheet() const

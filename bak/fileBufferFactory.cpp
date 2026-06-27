@@ -14,7 +14,14 @@ FileBufferFactory::FileBufferFactory()
     mDataPath{(std::filesystem::path{Paths::Get().GetBakDirectory()} / "data").string()},
     mDataFileProvider{{
         (Paths::Get().GetBakDirectoryPath() / "data").string(),
-        Paths::Get().GetBakDirectory()
+        Paths::Get().GetBakDirectory(),
+        // spike: also search next to the executable (and the CWD) so a self-contained
+        // package (exe + data/ side by side) runs no matter where it's launched from —
+        // double-click, shortcut, or a UNC path cmd refused to cd into.
+        (GetExecutableDirectory() / "data").string(),
+        GetExecutableDirectory().string(),
+        "data",
+        "."
     }}
 {}
 

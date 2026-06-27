@@ -15,6 +15,8 @@ add_library(bak
     partyChangeCache.hpp partyChangeCache.cpp
     chapterTransitions.hpp chapterTransitions.cpp
     combat/combat.hpp combat/combat.cpp
+    combat/combatFormula.hpp combat/combatFormula.cpp
+    combat/spellFormula.hpp combat/spellFormula.cpp
     combat/combatModel.hpp combat/combatModel.cpp
     combat/retreat.hpp combat/retreat.cpp
     condition.hpp condition.cpp
@@ -82,6 +84,7 @@ add_library(bak
     worldClock.hpp worldClock.cpp
     worldItem.hpp worldItem.cpp
     worldFactory.hpp worldFactory.cpp
+    roadNetwork.hpp roadNetwork.cpp
     zoneReference.hpp zoneReference.cpp
     zone.hpp zone.cpp
 )

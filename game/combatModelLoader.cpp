@@ -13,7 +13,11 @@
 
 #include "com/logger.hpp"
 #include "com/ostream.hpp"
+#include "com/path.hpp"
 #include "com/string.hpp"
+
+#include <filesystem>
+#include <iomanip>
 
 #include "graphics/meshObject.hpp"
 #include "graphics/texture.hpp"
@@ -70,13 +74,51 @@ void CombatModelLoader::LoadMonsterSprites(BAK::MonsterIndex m)
         pal = BAK::Palette{pal, cs};
     }
 
+    // Hi-res override key suffix: the colour variant baked into the PNGs. Combat
+    // sprites are coloured (Zone1 + ColorSwap) per monster, so the same sprite
+    // sheet has different art per colorswap — the override is keyed by both.
+    const std::string csTag = monster.mColorSwap <= 9
+        ? "cs" + std::to_string(+monster.mColorSwap)
+        : "base";
+
     auto LoadImages = [&](auto suffix)
     {
-        std::stringstream ss{};
-        ss << prefix << +suffix << ".BMX";
-        auto fb = BAK::FileBufferFactory::Get().CreateDataBuffer(ss.str());
+        std::stringstream sheetSs{};
+        sheetSs << prefix << +suffix;                 // e.g. "GNT1"
+        const auto sheet = sheetSs.str();
+
+        auto fb = BAK::FileBufferFactory::Get().CreateDataBuffer(sheet + ".BMX");
         const auto images = BAK::LoadImages(fb);
-        BAK::TextureFactory::AddToTextureStore(textureStore, images, pal);
+
+        // <ModDir>/combat/<SHEET>__<csTag>/<SHEET>__<csTag>_<NN>.PNG, one per frame.
+        // Each PNG already has the final colour baked in, so it REPLACES the
+        // palettised frame (no ColorSwap applied). Missing frames fall back to the
+        // decoded BMX, so a partial override pack works. Frame count/order are
+        // preserved, keeping the animation offset table valid.
+        const auto base = sheet + "__" + csTag;
+        const auto dir = Paths::Get().GetModDirectoryPath() / "combat" / base;
+        const bool haveOverride = std::filesystem::exists(dir);
+        if (haveOverride)
+            logger.Debug() << "Using hi-res override for combat sheet: " << base
+                << " (" << images.size() << " frames)\n";
+
+        for (unsigned i = 0; i < images.size(); i++)
+        {
+            std::stringstream pngSs{};
+            pngSs << base << "_" << std::setw(2) << std::setfill('0') << i << ".PNG";
+            const auto path = dir / pngSs.str();
+            if (haveOverride && std::filesystem::exists(path))
+            {
+                textureStore.AddTexture(BAK::PNGToTexture(
+                    path.string(),
+                    images[i].GetWidth(),
+                    images[i].GetHeight()));
+            }
+            else
+            {
+                BAK::TextureFactory::AddToTextureStore(textureStore, images[i], pal);
+            }
+        }
     };
 
     std::vector<std::size_t> offsets{0};

@@ -1,13 +1,37 @@
 #include "com/path.hpp"
 #include "com/logger.hpp"
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
+std::filesystem::path GetExecutableDirectory()
+{
+    std::error_code ec{};
+#if defined(_WIN32)
+    char buf[MAX_PATH];
+    const auto len = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+    if (len > 0 && len < MAX_PATH)
+    {
+        return std::filesystem::path{std::string{buf, len}}.parent_path();
+    }
+#else
+    auto exe = std::filesystem::read_symlink("/proc/self/exe", ec);
+    if (!ec)
+    {
+        return exe.parent_path();
+    }
+#endif
+    return std::filesystem::current_path(ec);
+}
+
 std::string GetHomeDirectory()
 {
-#ifdef _MSC_VER
+#if defined(_WIN32)
     constexpr auto homeVar = "APPDATA";
 #else
     constexpr auto homeVar = "HOME";
-#endif 
+#endif
     auto* home = getenv(homeVar);
 
     if (home == nullptr)

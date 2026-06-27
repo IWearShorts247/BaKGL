@@ -7,7 +7,9 @@
 
 #include <GL/glew.h>
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
 
 namespace Graphics {
 
@@ -290,12 +292,17 @@ void TextureBuffer::LoadTexturesGL(
 
     BindGL();
 
+    // Allocate only as many array layers as there are textures (clamped to >=1).
+    // The hardcoded sMaxTextures (256) over-allocated maxDim*maxDim*256 — for the
+    // hi-res actor sheet (~1.3k px) that is ~1.8 GB per array and OOMs weaker GPUs;
+    // the sheet only ever indexes layers [0, textures.size()).
+    const auto layers = static_cast<GLsizei>(std::max<std::size_t>(1, textures.size()));
     glTexStorage3D(
         mTextureType,
         1,              // levels
         GL_RGBA8,       // Internal format
         maxDim, maxDim, // width,height
-        sMaxTextures     // Number of layers
+        layers          // Number of layers (actual, not the 256 max)
     );
 
 

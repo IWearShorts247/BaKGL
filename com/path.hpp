@@ -4,6 +4,8 @@
 #include <string>
 
 std::string GetHomeDirectory();
+// Directory containing the running executable (for locating bundled data/ regardless of CWD).
+std::filesystem::path GetExecutableDirectory();
 class Paths
 {
 public:

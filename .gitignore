@@ -13,3 +13,7 @@ shaders/shader_binary_cache.hxx
 *pycache*
 dialog
 
+
+# build/patch artifacts
+*.orig
+*.log

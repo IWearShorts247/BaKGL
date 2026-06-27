@@ -57,6 +57,11 @@ public:
     void DoTeleport(BAK::Encounter::Teleport teleport) override;
     void LoadGame(std::string savePath, std::optional<BAK::Chapter> chapter) override;
 
+    // --- Road auto-following ---
+    void ToggleFollowRoad() override;        // snap onto / off the nearest road (HUD button)
+    void FollowRoadStep(bool forward);       // advance one road segment (forward = movement input)
+    bool IsFollowingRoad() const { return mFollowingRoad; }
+
     void LoadZoneData(BAK::ZoneNumber zone);
     void DoTransition(
         BAK::ZoneNumber targetZone,
@@ -94,6 +99,10 @@ public:
         BAK::EntityIndex entityId,
         std::function<void()>&& onComplete) override;
 
+    void RequestCombatExit(BAK::CombatResult result) override;
+
+    void SetGridHighlights(const std::vector<Game::Combat::GridHighlight>& cells) override;
+
     const Graphics::RenderData& GetZoneRenderData() const;
     void OnTimeDelta(double timeDelta);
 
@@ -112,6 +121,12 @@ public:
     std::unique_ptr<IInteractable> mCurrentInteractable;
 
     std::unique_ptr<BAK::Zone> mZoneData;
+
+    // Road auto-follow state (node indices into the current zone's RoadNetwork)
+    bool mFollowingRoad{false};
+    std::optional<unsigned> mRoadNode{};
+    std::optional<unsigned> mPrevRoadNode{};
+    void SnapOntoRoad(unsigned node);
 
     const BAK::Encounter::Encounter* mActiveEncounter;
     std::unordered_map<BAK::EntityIndex, const BAK::Encounter::Encounter*> mEncounters;
@@ -138,10 +153,17 @@ public:
     bool mGridVisible{false};
     std::vector<Renderable> mGridCellRenderables{};
     std::vector<BAK::EntityIndex> mGridCellEntityIds{};
+    // Orientation the grid was last shown with, and the per-cell highlight state, so the
+    // grid can be rebuilt (recoloured) each turn at the same cell positions.
+    BAK::GamePositionAndHeading mCombatOrientation{};
+    std::vector<Game::Combat::GridHighlight> mGridHighlights{};
 
     bool mAnimationActive{false};
 
     double mAccumulatedTime{};
+    // Set from a combat animation callback when one side is wiped; processed (deferred)
+    // in OnTimeDelta so teardown happens outside the animator iteration.
+    std::optional<BAK::CombatResult> mPendingCombatResult{};
 
     const Logging::Logger& mLogger;
 };

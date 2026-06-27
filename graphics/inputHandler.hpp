@@ -27,6 +27,9 @@ public:
     }
 
     void Bind(int key, KeyCallback&& callback);
+    // Edge-triggered: fires ONCE per key-down transition (not every frame held).
+    // Use for toggles; Bind() is level-triggered and repeats while held (movement).
+    void BindPress(int key, KeyCallback&& callback);
     void BindCharacter(CharacterCallback&& callback);
     void BindMouse(
         int button,
@@ -55,6 +58,8 @@ private:
     bool mHandleInput;
 
     std::unordered_map<int, KeyCallback> mKeyBindings;
+    std::unordered_map<int, KeyCallback> mKeyPressBindings;
+    std::unordered_map<int, bool> mKeyPressState;
     CharacterCallback mCharacterCallback;
     std::unordered_map<int, std::pair<MouseCallback, MouseCallback>> mMouseBindings;
     MouseCallback mMouseMovedBinding;

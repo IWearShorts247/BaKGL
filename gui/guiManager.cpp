@@ -635,6 +635,12 @@ void GuiManager::ShowFullMap()
     });
 }
 
+void GuiManager::ToggleFollowRoad()
+{
+    if (mZoneLoader)
+        mZoneLoader->ToggleFollowRoad();
+}
+
 void GuiManager::ShowGameStartMap()
 {
     DoFade(1.0, [this]{
