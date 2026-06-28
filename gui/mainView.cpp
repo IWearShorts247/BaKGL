@@ -101,15 +101,22 @@ MainView::MainView(
         }
     }
 
-    // Local-map button bar (replaces the travel buttons in map mode). A 2x2 grid on the
-    // right, clear of the party portraits (which stay on the left), roughly where the
-    // original's round map-buttons sit. Text labels for now (the original uses round icon
-    // buttons); positions provisional pending a visual pass.
-    mMapButtons.reserve(4);
-    mMapButtons.emplace_back(glm::vec2{182, 150}, glm::vec2{58, 14}, mGameFont,
-        "#Zoom In", [this]{ mGuiManager.LocalMapZoomIn(); });
-    mMapButtons.emplace_back(glm::vec2{246, 150}, glm::vec2{58, 14}, mGameFont,
-        "#Zoom Out", [this]{ mGuiManager.LocalMapZoomOut(); });
+    // Local-map button bar (replaces the travel buttons in map mode), on the right, clear of
+    // the party portraits. Zoom In/Out use the original's round BICONS1 icons (10/11, the
+    // user's upscaled assets override these); Full Map and Main are text for now. Positions
+    // provisional pending a visual pass.
+    {
+        const auto zoomInDims = std::get<glm::vec2>(icons.GetButton(10));
+        const auto zoomOutDims = std::get<glm::vec2>(icons.GetButton(11));
+        mMapIconButtons.reserve(2);
+        mMapIconButtons.emplace_back(glm::vec2{188, 144}, zoomInDims,
+            icons.GetButtonTextures(10), [this]{ mGuiManager.LocalMapZoomIn(); }, []{});
+        mMapIconButtons.back().CenterImage(zoomInDims);
+        mMapIconButtons.emplace_back(glm::vec2{224, 144}, zoomOutDims,
+            icons.GetButtonTextures(11), [this]{ mGuiManager.LocalMapZoomOut(); }, []{});
+        mMapIconButtons.back().CenterImage(zoomOutDims);
+    }
+    mMapButtons.reserve(2);
     mMapButtons.emplace_back(glm::vec2{182, 170}, glm::vec2{58, 14}, mGameFont,
         "#Full Map", [this]{ mGuiManager.ShowFullMap(); });
     mMapButtons.emplace_back(glm::vec2{246, 170}, glm::vec2{58, 14}, mGameFont,
@@ -276,6 +283,8 @@ void MainView::AddChildren()
     ClearChildren();
     if (mMapMode)
     {
+        for (auto& button : mMapIconButtons)
+            AddChildBack(&button);
         for (auto& button : mMapButtons)
             AddChildBack(&button);
     }

@@ -1036,8 +1036,9 @@ int main(int argc, char** argv)
         if (guiManager.InLocalMapView())
         {
             const float northYaw = BAK::ToGlAngle(BAK::GameHeading{0}).x;
-            // Negated so the marker turns the same way as the party on the north-up map.
-            const float angle = -(camera.GetAngle().x - northYaw);
+            // Negated so the marker turns the same way as the party on the north-up map;
+            // +pi because the triangle pointed 180 deg off (north while the party faced south).
+            const float angle = -(camera.GetAngle().x - northYaw) + std::numbers::pi_v<float>;
             const float c = std::cos(angle);
             const float s = std::sin(angle);
             const glm::vec2 half = sMarkerDims * 0.5f;

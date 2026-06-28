@@ -74,7 +74,8 @@ private:
     std::vector<ClickButtonImage> mCharacters;
 
     bool mMapMode{false};
-    std::vector<ClickButton> mMapButtons;
+    std::vector<ClickButtonImage> mMapIconButtons; // Zoom In/Out (BICONS1 round icons)
+    std::vector<ClickButton> mMapButtons;          // Full Map / Main (text)
 
     bool mCanSaveBookmark{false};
     bool mShowingBookmarkDialog{false};
