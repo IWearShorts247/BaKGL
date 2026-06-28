@@ -326,6 +326,11 @@ public:
         return entityIndex;
     }
 
+    // Distance-cull threshold for DrawWithShadow. Raised for the top-down local map so the
+    // whole loaded area renders instead of just a ~2-tile disk around the camera.
+    void SetDrawDistance(int drawDistance) { mDrawDistance = drawDistance; }
+    int GetDrawDistance() const { return mDrawDistance; }
+
     void BeginDepthMapDraw()
     {
         mDepthFB.BindGL();

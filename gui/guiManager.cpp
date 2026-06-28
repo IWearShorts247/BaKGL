@@ -267,25 +267,14 @@ void GuiManager::EnterLocalMap()
     });
 }
 
-// Vertical ortho half-extents (world units) for the 3 zoom levels. Provisional — estimated
-// from the original's min/default/max screenshots; fine-tune against a fresh capture.
-namespace {
-constexpr std::array sLocalMapHalfExtents{500.0f, 900.0f, 1500.0f};
-}
-
 void GuiManager::LocalMapZoomIn()
 {
-    mLocalMapZoom = std::max(0, mLocalMapZoom - 1);
+    mLocalMapHalfExtent = std::max(mLocalMapHalfExtent * 0.8f, 300.0f);
 }
 
 void GuiManager::LocalMapZoomOut()
 {
-    mLocalMapZoom = std::min(static_cast<int>(sLocalMapHalfExtents.size()) - 1, mLocalMapZoom + 1);
-}
-
-float GuiManager::GetLocalMapHalfExtent() const
-{
-    return sLocalMapHalfExtents[static_cast<std::size_t>(mLocalMapZoom)];
+    mLocalMapHalfExtent = std::min(mLocalMapHalfExtent * 1.25f, 2500.0f);
 }
 
 void GuiManager::EnterMainView()

@@ -897,6 +897,10 @@ int main(int argc, char** argv)
             const bool localMap = guiManager.InLocalMapView();
             if (localMap) UpdateMapCamera();
             Camera& renderCamera = localMap ? mapCamera : *cameraPtr;
+            // The map looks down from high up, so the normal first-person draw distance would
+            // cull everything beyond a small disk around the party. Render the whole loaded
+            // area for the map; restore the configured distance for the 3D view.
+            renderer.SetDrawDistance(localMap ? 10000000 : config.mGraphics.mDrawDistance);
 
             glEnable(GL_BLEND);
             glEnable(GL_MULTISAMPLE);

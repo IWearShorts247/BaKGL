@@ -86,7 +86,7 @@ public:
     void EnterLocalMap() override;
     void LocalMapZoomIn() override;
     void LocalMapZoomOut() override;
-    float GetLocalMapHalfExtent() const override;
+    float GetLocalMapHalfExtent() const override { return mLocalMapHalfExtent; }
     void EnterMainMenu(bool gameRunning) override;
     void PartyDied(BAK::Target dialog) override;
 
@@ -188,8 +188,9 @@ private:
     FadeScreen mFadeScreen;
     bool mDebugDisableFades{false};
     bool mInLocalMap{false};
-    // Local-map zoom: 3 discrete levels (0 = in/closest .. 2 = out/widest), default = middle.
-    int mLocalMapZoom{1};
+    // Local-map zoom: ortho vertical half-extent (world units). Zoom In/Out scale it
+    // continuously (the original has many zoom steps). Default/clamps provisional.
+    float mLocalMapHalfExtent{900.0f};
     std::vector<std::function<void()>> mFadeFunction;
     std::function<void()> mEndFadeFunction;
     std::function<void()> mCutsceneFinished;
