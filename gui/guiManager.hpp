@@ -189,8 +189,9 @@ private:
     bool mDebugDisableFades{false};
     bool mInLocalMap{false};
     // Local-map zoom: ortho vertical half-extent (world units). Zoom In/Out scale it
-    // continuously (the original has many zoom steps). Default/clamps provisional.
-    float mLocalMapHalfExtent{580.0f};
+    // continuously (the original has many zoom steps). Default calibrated to the original's
+    // default zoom (user anchor: it matched BaKGL's previous max zoom-in, 240).
+    float mLocalMapHalfExtent{240.0f};
     std::vector<std::function<void()>> mFadeFunction;
     std::function<void()> mEndFadeFunction;
     std::function<void()> mCutsceneFinished;
