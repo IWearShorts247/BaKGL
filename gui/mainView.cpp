@@ -113,10 +113,10 @@ MainView::MainView(
     };
     mMapIconButtons.reserve(6);
     addMapIcon({200, 130}, 22, [this]{ mGuiManager.ToggleFollowRoad(); });
-    addMapIcon({237, 130}, 10, [this]{ mGuiManager.LocalMapZoomIn(); });
+    addMapIcon({237, 130}, 10, [this]{ mGuiManager.LocalMapZoomOut(); });
     addMapIcon({273, 130},  7, [this]{ mGuiManager.ShowCamp(false, nullptr); });
     addMapIcon({200, 164}, 12, [this]{ mGuiManager.ShowFullMap(); });
-    addMapIcon({236, 164}, 11, [this]{ mGuiManager.LocalMapZoomOut(); });
+    addMapIcon({236, 164}, 11, [this]{ mGuiManager.LocalMapZoomIn(); });
     addMapIcon({273, 164}, 61, [this]{ mGuiManager.EnterMainView(); });
 
     AddChildren();
