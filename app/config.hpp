@@ -80,4 +80,9 @@ struct Config
 
 Config LoadConfig(std::string path);
 
+// Persist display settings by rewriting ONLY the "Graphics" block of the JSONC file at
+// path; every other block and all comments outside that block are preserved verbatim.
+// Returns false (without modifying the file) if it cannot be parsed/located.
+bool WriteGraphicsConfig(const std::string& path, const Graphics& graphics);
+
 }

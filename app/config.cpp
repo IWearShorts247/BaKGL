@@ -1,14 +1,51 @@
 #include "app/config.hpp"
 
 #include "com/json.hpp"
+#include "com/logger.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
 #include <fstream>
+#include <iterator>
+#include <sstream>
 
 namespace Config {
+
+namespace {
+
+const char* BoolStr(bool b) { return b ? "true" : "false"; }
+
+// Regenerate the whole "Graphics": { ... } block as JSONC text. The first line has no
+// leading indent (the caller keeps the original indentation that precedes "Graphics");
+// inner lines use the file's 4-space style. All managed keys are emitted so a partial or
+// legacy config gains the missing ones. Comments here are ours to define.
+std::string GenerateGraphicsBlock(const Graphics& g)
+{
+    std::ostringstream os{};
+    os << "\"Graphics\": {\n"
+       << "        // Integer logical-canvas scale (320x200 * UiScale). 3..6 typical; clamped to monitor.\n"
+       << "        \"UiScale\": " << g.mUiScale << ",\n"
+       << "        // \"Windowed\" | \"BorderlessFullscreen\" | \"ExclusiveFullscreen\"\n"
+       << "        \"WindowMode\": \"" << ToString(g.mWindowMode) << "\",\n"
+       << "        \"Fullscreen\": {\n"
+       << "            \"Monitor\": " << g.mMonitor << ",\n"
+       << "            \"AutoScale\": " << BoolStr(g.mAutoScale) << "\n"
+       << "        },\n"
+       << "        \"VSync\": " << BoolStr(g.mVSync) << ",\n"
+       << "        // DEPRECATED back-compat: kept in sync with UiScale for old readers.\n"
+       << "        \"ResolutionScale\": " << g.mUiScale << ".0,\n"
+       << "        \"EnableShadows\": " << BoolStr(g.mShadows) << ",\n"
+       << "        \"EnableImGui\": " << BoolStr(g.mEnableImGui) << ",\n"
+       << "        \"DrawDistance\": " << g.mDrawDistance << ",\n"
+       << "        \"DebugDisableFades\": " << BoolStr(g.mDebugDisableFades) << ",\n"
+       << "        \"DebugRenderEncounters\": " << BoolStr(g.mDebugRenderEncounters) << "\n"
+       << "    }";
+    return os.str();
+}
+
+}
 
 WindowMode ParseWindowMode(const std::string& s)
 {
@@ -152,6 +189,58 @@ Config LoadConfig(std::string path)
     std::cout << "Loaded config file: " << data <<"\n";
 
     return config;
+}
+
+bool WriteGraphicsConfig(const std::string& path, const Graphics& graphics)
+{
+    const auto& logger = ::Logging::LogState::GetLogger("Display");
+
+    std::ifstream in{path, std::ios::in | std::ios::binary};
+    if (!in)
+    {
+        logger.Error() << "Cannot open config for persistence: " << path << "\n";
+        return false;
+    }
+    const std::string text{
+        std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+    in.close();
+
+    // Locate the "Graphics" block and its matching closing brace. NB: this brace scan does
+    // not skip braces inside strings/comments; the managed block contains none, so it is
+    // safe for our config. Everything outside the block is preserved verbatim.
+    const auto keyPos = text.find("\"Graphics\"");
+    const auto bracePos = keyPos == std::string::npos
+        ? std::string::npos : text.find('{', keyPos);
+    if (bracePos == std::string::npos)
+    {
+        logger.Error() << "No \"Graphics\" block found in " << path << "; not persisting\n";
+        return false;
+    }
+    int depth = 0;
+    std::size_t endPos = std::string::npos;
+    for (std::size_t i = bracePos; i < text.size(); ++i)
+    {
+        if (text[i] == '{') ++depth;
+        else if (text[i] == '}' && --depth == 0) { endPos = i; break; }
+    }
+    if (endPos == std::string::npos)
+    {
+        logger.Error() << "Unterminated \"Graphics\" block in " << path << "; not persisting\n";
+        return false;
+    }
+
+    const std::string updated =
+        text.substr(0, keyPos) + GenerateGraphicsBlock(graphics) + text.substr(endPos + 1);
+
+    std::ofstream out{path, std::ios::out | std::ios::trunc | std::ios::binary};
+    if (!out)
+    {
+        logger.Error() << "Cannot write config for persistence: " << path << "\n";
+        return false;
+    }
+    out << updated;
+    logger.Info() << "Persisted Graphics settings to " << path << "\n";
+    return true;
 }
 
 }

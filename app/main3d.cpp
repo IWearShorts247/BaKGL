@@ -106,15 +106,16 @@ Options Parse(int argc, char** argv)
     return values;
 }
 
-Config::Config LoadConfigFile(std::string configPath)
+Config::Config LoadConfigFile(std::string configPath, std::string& loadedPath)
 {
     auto config = Config::Config{};
-    auto TryLoad = [&config](std::string path)
+    auto TryLoad = [&](std::string path)
     {
         try
         {
             std::cout << "Loading config file: " << path << std::endl;
             config = Config::LoadConfig(path);
+            loadedPath = path;
             return "";
         }
         catch (const std::exception& error)
@@ -174,7 +175,10 @@ int main(int argc, char** argv)
     }
 
     const auto options = Parse(argc, argv);
-    const auto config = LoadConfigFile(options.configFile);
+    // Path the config was actually loaded from, so display settings can be persisted back
+    // to the same file (empty if no config file was found).
+    std::string configPath{};
+    auto config = LoadConfigFile(options.configFile, configPath);
     Logging::LogState::SetLogTime(config.mLogging.mLogTime);
     Logging::LogState::SetLogColor(config.mLogging.mLogColours);
     if (options.logLevel != "")
@@ -549,11 +553,27 @@ int main(int argc, char** argv)
         if (!Gui::TextInput::AnyFocused())
             guiRenderer.ToggleCrossfade();
     });
-    // Alt+Enter: toggle borderless fullscreen <-> windowed (no GL context recreation).
+    // Alt+Enter: toggle borderless fullscreen <-> windowed (no GL context recreation), then
+    // persist the new window mode so it survives a restart.
+    const auto ToConfigWindowMode = [](Graphics::WindowMode m)
+    {
+        switch (m)
+        {
+            case Graphics::WindowMode::BorderlessFullscreen: return Config::WindowMode::BorderlessFullscreen;
+            case Graphics::WindowMode::ExclusiveFullscreen: return Config::WindowMode::ExclusiveFullscreen;
+            case Graphics::WindowMode::Windowed: return Config::WindowMode::Windowed;
+        }
+        return Config::WindowMode::Windowed;
+    };
     inputHandler.BindPress(GLFW_KEY_ENTER, [&]{
         if (glfwGetKey(window.get(), GLFW_KEY_LEFT_ALT) == GLFW_PRESS
             || glfwGetKey(window.get(), GLFW_KEY_RIGHT_ALT) == GLFW_PRESS)
+        {
             windowManager.ToggleFullscreen();
+            config.mGraphics.mWindowMode = ToConfigWindowMode(windowManager.GetMode());
+            if (!configPath.empty())
+                Config::WriteGraphicsConfig(configPath, config.mGraphics);
+        }
     });
     inputHandler.Bind(GLFW_KEY_BACKSPACE,   [&]{ if (root.OnKeyEvent(Gui::KeyPress{GLFW_KEY_BACKSPACE})){ ;} });
     inputHandler.BindCharacter([&](char character){ if(root.OnKeyEvent(Gui::Character{character})){ ;} });
