@@ -255,12 +255,23 @@ Config::Config LoadConfigFile(std::string configPath, std::string& loadedPath)
             std::cout << "Loading config file: " << path << std::endl;
             config = Config::LoadConfig(path);
             loadedPath = path;
-            return "";
         }
         catch (const std::exception& error)
         {
-            std::cerr << "Failed to load config file due to: " << error.what() << std::endl;
-            exit(1);
+            // A bad config must never brick the game. Back up the offending file and continue
+            // with defaults rather than exiting; the user can recover or re-enter settings.
+            std::cerr << "Failed to load config file '" << path << "': " << error.what()
+                << " -- continuing with defaults." << std::endl;
+            std::error_code ec{};
+            if (std::filesystem::exists(path))
+            {
+                const auto badPath = path + ".bad";
+                std::filesystem::rename(path, badPath, ec);
+                std::cerr << (ec ? "Could not back up corrupt config" : "Backed up corrupt config to")
+                    << " " << badPath << std::endl;
+            }
+            config = Config::Config{};
+            loadedPath.clear();
         }
     };
 

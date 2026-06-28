@@ -232,13 +232,48 @@ bool WriteGraphicsConfig(const std::string& path, const Graphics& graphics)
     const std::string updated =
         text.substr(0, keyPos) + GenerateGraphicsBlock(graphics) + text.substr(endPos + 1);
 
-    std::ofstream out{path, std::ios::out | std::ios::trunc | std::ios::binary};
-    if (!out)
+    // Validate the regenerated text BEFORE touching the file: never replace a good config
+    // with something unparseable (guards against any garbage in the generated string).
+    try
     {
-        logger.Error() << "Cannot write config for persistence: " << path << "\n";
+        const auto check = nlohmann::json::parse(updated, nullptr, true, true);
+        if (!check.contains("Graphics"))
+            throw std::runtime_error("regenerated config has no Graphics block");
+    }
+    catch (const std::exception& e)
+    {
+        logger.Error() << "Refusing to persist config (regenerated text invalid): "
+            << e.what() << "\n";
         return false;
     }
-    out << updated;
+
+    // Write atomically: temp file, then rename over the target. A crash or partial write
+    // can only leave a stray .tmp, never a corrupted config.json.
+    const auto tmpPath = path + ".tmp";
+    {
+        std::ofstream out{tmpPath, std::ios::out | std::ios::trunc | std::ios::binary};
+        if (!out)
+        {
+            logger.Error() << "Cannot open temp config for writing: " << tmpPath << "\n";
+            return false;
+        }
+        out << updated;
+        out.flush();
+        if (!out)
+        {
+            logger.Error() << "Failed writing temp config: " << tmpPath << "\n";
+            return false;
+        }
+    }
+
+    std::error_code ec{};
+    std::filesystem::rename(tmpPath, path, ec);
+    if (ec)
+    {
+        logger.Error() << "Failed to replace config " << path << ": " << ec.message() << "\n";
+        std::filesystem::remove(tmpPath, ec);
+        return false;
+    }
     logger.Info() << "Persisted Graphics settings to " << path << "\n";
     return true;
 }
