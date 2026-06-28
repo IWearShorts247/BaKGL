@@ -269,12 +269,12 @@ void GuiManager::EnterLocalMap()
 
 void GuiManager::LocalMapZoomIn()
 {
-    mLocalMapHalfExtent = std::max(mLocalMapHalfExtent * 0.8f, 300.0f);
+    mLocalMapHalfExtent = std::max(mLocalMapHalfExtent * 0.8f, 280.0f);
 }
 
 void GuiManager::LocalMapZoomOut()
 {
-    mLocalMapHalfExtent = std::min(mLocalMapHalfExtent * 1.25f, 2500.0f);
+    mLocalMapHalfExtent = std::min(mLocalMapHalfExtent * 1.25f, 1000.0f);
 }
 
 void GuiManager::EnterMainView()
