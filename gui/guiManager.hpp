@@ -190,7 +190,7 @@ private:
     bool mInLocalMap{false};
     // Local-map zoom: ortho vertical half-extent (world units). Zoom In/Out scale it
     // continuously (the original has many zoom steps). Default/clamps provisional.
-    float mLocalMapHalfExtent{650.0f};
+    float mLocalMapHalfExtent{580.0f};
     std::vector<std::function<void()>> mFadeFunction;
     std::function<void()> mEndFadeFunction;
     std::function<void()> mCutsceneFinished;

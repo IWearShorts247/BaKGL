@@ -566,9 +566,10 @@ int main(int argc, char** argv)
         const auto loc = camera.GetGameLocation();
         const auto partyGl = BAK::ToGlCoord<float>(loc.mPosition);
         // Above the party, looking steeply (not fully) down so terrain reads slightly 3D, as
-        // in the original; party heading points up the screen.
+        // in the original. The map is NORTH-UP (fixed orientation, like a paper map), NOT
+        // rotated to the party's facing — so use a constant heading, not the party's.
         mapCamera.SetPosition(glm::vec3{partyGl.x, 2500.0f, partyGl.z});
-        mapCamera.SetAngle(glm::vec2{BAK::ToGlAngle(loc.mHeading).x, -1.45f});
+        mapCamera.SetAngle(glm::vec2{BAK::ToGlAngle(BAK::GameHeading{0}).x, -1.45f});
         const float halfHeight = guiManager.GetLocalMapHalfExtent();
         const float aspect = nativeWidth / nativeHeight; // framebuffer is 16:10
         // Shift the view up so the party sits in the frame's map window (upper area), not the
