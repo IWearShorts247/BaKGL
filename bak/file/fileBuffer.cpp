@@ -169,30 +169,6 @@ FileBuffer::Load(std::ifstream &ifs)
 }
 
 void
-FileBuffer::Load(std::FILE* file)
-{
-    if (file)
-    {
-        mCurrent = mBuffer;
-        const auto read = std::fread(mBuffer, 1, mSize, file);
-        if (read != mSize)
-        {
-            std::stringstream ss{};
-            ss << __FILE__ << ":" << __LINE__ << " " << __FUNCTION__ << " IOError!";
-            Logging::LogFatal("FileBuffer") << ss.str() << std::endl;
-            throw std::runtime_error(ss.str());
-        }
-    }
-    else
-    {
-        std::stringstream ss{};
-        ss << __FILE__ << ":" << __LINE__ << " " << __FUNCTION__ << " OpenError!";
-        Logging::LogFatal("FileBuffer") << ss.str() << std::endl;
-        throw std::runtime_error(ss.str());
-    }
-}
-
-void
 FileBuffer::Save(std::ofstream &ofs)
 {
     if (ofs.is_open())

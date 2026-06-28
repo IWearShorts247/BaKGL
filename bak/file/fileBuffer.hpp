@@ -8,7 +8,6 @@
 #include <type_traits>
 
 #include <cstdint>
-#include <cstdio>
 #include <ostream>
 
 namespace BAK {
@@ -40,7 +39,6 @@ public:
     FileBuffer MakeSubBuffer(std::uint32_t offset, std::uint32_t size) const;
 
     void Load(std::ifstream &ifs);
-    void Load(std::FILE* file);
     void Save(std::ofstream &ofs);
     void Save(std::ofstream &ofs, unsigned n);
     void Show(std::ostream&);

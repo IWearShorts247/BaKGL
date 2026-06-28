@@ -2,10 +2,6 @@
 
 #include "com/logger.hpp"
 
-#include <cerrno>
-#include <cstdio>
-#include <cstring>
-
 namespace BAK::File {
 
 unsigned GetStreamSize(std::ifstream& ifs)
@@ -20,29 +16,25 @@ unsigned GetStreamSize(std::ifstream& ifs)
 FileBuffer CreateFileBuffer(const std::string& fileName)
 {
     Logging::LogInfo(__FUNCTION__) << "Opening: " << fileName << std::endl;
-    // NB: read via stdio (fopen) rather than std::ifstream. On the mingw-w64 Windows
-    // build, libstdc++ basic_filebuf::open() fails for perfectly valid paths (it errors
-    // with ENOENT even though the file exists and fopen() on the identical path in the
-    // same process succeeds — a global C-locale change by a dependency breaks filebuf's
-    // narrow->wide path conversion). fopen is unaffected and works on every platform.
-    std::FILE* in = std::fopen(fileName.c_str(), "rb");
-    if (in == nullptr)
+    std::ifstream in{};
+    in.open(fileName, std::ios::in | std::ios::binary);
+
+    // Check is_open() rather than good(): on mingw-w64, a successful open() leaves eofbit set
+    // (so good() == false even though the file is open). Clear the spurious bit and the stream
+    // reads normally (byte-identical to a stdio read).
+    if (!in.is_open())
     {
-        const int openErrno = errno;
+        std::cerr << "Failed to open file: " << fileName << std::endl;
         std::stringstream ss{};
-        ss << __FILE__ << ":" << __LINE__ << " " << __FUNCTION__ << " OpenError! ["
-           << fileName << "] errno=" << openErrno << " (" << std::strerror(openErrno) << ")";
+        ss << __FILE__ << ":" << __LINE__ << " " << __FUNCTION__ << " OpenError!";
         Logging::LogFatal("FileBuffer") << ss.str() << std::endl;
         throw std::runtime_error(ss.str());
     }
+    in.clear();
 
-    std::fseek(in, 0, SEEK_END);
-    const long size = std::ftell(in);
-    std::fseek(in, 0, SEEK_SET);
-
-    FileBuffer fb{static_cast<unsigned>(size < 0 ? 0 : size)};
+    FileBuffer fb{GetStreamSize(in)};
     fb.Load(in);
-    std::fclose(in);
+    in.close();
     return fb;
 }
 
