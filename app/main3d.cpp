@@ -32,6 +32,7 @@ extern "C" {
 #include "graphics/sprites.hpp"
 
 #include "gui/guiManager.hpp"
+#include "gui/displaySettings.hpp"
 #include "gui/textInput.hpp"
 #include "gui/window.hpp"
 
@@ -50,6 +51,7 @@ extern "C" {
 #include <windows.h>
 #endif
 #include <memory>
+#include <optional>
 #include <numbers>
 #include <sstream>
 
@@ -104,6 +106,143 @@ Options Parse(int argc, char** argv)
     }
 
     return values;
+}
+
+namespace {
+
+Graphics::WindowMode ToGraphicsMode(Config::WindowMode m)
+{
+    switch (m)
+    {
+        case Config::WindowMode::BorderlessFullscreen: return Graphics::WindowMode::BorderlessFullscreen;
+        case Config::WindowMode::ExclusiveFullscreen: return Graphics::WindowMode::ExclusiveFullscreen;
+        case Config::WindowMode::Windowed: return Graphics::WindowMode::Windowed;
+    }
+    return Graphics::WindowMode::Windowed;
+}
+
+Config::WindowMode ToConfigMode(Graphics::WindowMode m)
+{
+    switch (m)
+    {
+        case Graphics::WindowMode::BorderlessFullscreen: return Config::WindowMode::BorderlessFullscreen;
+        case Graphics::WindowMode::ExclusiveFullscreen: return Config::WindowMode::ExclusiveFullscreen;
+        case Graphics::WindowMode::Windowed: return Config::WindowMode::Windowed;
+    }
+    return Config::WindowMode::Windowed;
+}
+
+// Applies display settings live for the Preferences menu (Stage 4). Holds the relevant
+// main() locals by reference. Because the canvas is always 16:10 (320*S x 200*S), changing
+// the scale never changes the aspect, so no 3D-camera/projection rebuild is needed — only
+// the canvas + pick-coordinate resolution and the GUI camera's pixel bookkeeping.
+class MainDisplayController : public Gui::IDisplayController
+{
+public:
+    MainDisplayController(
+        GLFWwindow* window,
+        std::optional<Graphics::CanvasFramebuffer>& canvas,
+        Graphics::GuiRenderer& guiRenderer,
+        Graphics::WindowManager& windowManager,
+        Config::Config& config,
+        const std::string& configPath,
+        float& width, float& height, float& guiScalar, glm::vec2& guiScaleInv,
+        float nativeWidth, float nativeHeight)
+    :
+        mWindow{window}, mCanvas{canvas}, mGuiRenderer{guiRenderer},
+        mWindowManager{windowManager}, mConfig{config}, mConfigPath{configPath},
+        mWidth{width}, mHeight{height}, mGuiScalar{guiScalar}, mGuiScaleInv{guiScaleInv},
+        mNativeWidth{nativeWidth}, mNativeHeight{nativeHeight}
+    {}
+
+    Gui::DisplaySettings GetCurrentSettings() const override
+    {
+        const auto& g = mConfig.mGraphics;
+        return {g.mUiScale, ToGraphicsMode(g.mWindowMode), g.mMonitor, g.mAutoScale, g.mVSync};
+    }
+
+    int GetMonitorCount() const override
+    {
+        int count = 0;
+        glfwGetMonitors(&count);
+        return std::max(count, 1);
+    }
+
+    int GetMaxUiScale(int monitorIndex) const override
+    {
+        auto* monitor = Graphics::WindowManager::MonitorAt(monitorIndex);
+        const auto* vidMode = glfwGetVideoMode(monitor);
+        return vidMode
+            ? Graphics::WindowManager::ComputeAutoScale(vidMode->width, vidMode->height)
+            : 6;
+    }
+
+    void PreviewSettings(const Gui::DisplaySettings& s) override { Apply(s, false); }
+    void CommitSettings(const Gui::DisplaySettings& s) override { Apply(s, true); }
+
+private:
+    void Apply(const Gui::DisplaySettings& s, bool persist)
+    {
+        // 1. Window mode first (this resizes the window / framebuffer).
+        mWindowManager.Apply(s.mWindowMode, s.mMonitor);
+
+        // 2. Effective integer scale: fullscreen fits the canvas to the monitor.
+        int effScale = s.mUiScale;
+        if (s.mWindowMode != Graphics::WindowMode::Windowed)
+        {
+            auto* monitor = Graphics::WindowManager::MonitorAt(s.mMonitor);
+            if (const auto* vidMode = glfwGetVideoMode(monitor))
+            {
+                const int fit = Graphics::WindowManager::ComputeAutoScale(vidMode->width, vidMode->height);
+                effScale = s.mAutoScale ? fit : std::min(s.mUiScale, fit);
+            }
+        }
+
+        // 3. Rebuild the canvas + GUI camera + the shared scale locals for the new scale.
+        mGuiScalar = static_cast<float>(effScale);
+        mWidth = mNativeWidth * mGuiScalar;
+        mHeight = mNativeHeight * mGuiScalar;
+        mGuiScaleInv = glm::vec2{1.0f / mGuiScalar, 1.0f / mGuiScalar};
+        mCanvas.emplace(static_cast<unsigned>(mWidth), static_cast<unsigned>(mHeight));
+        mGuiRenderer.mCamera.mWidth = mWidth;
+        mGuiRenderer.mCamera.mHeight = mHeight;
+        mGuiRenderer.mCamera.mScale = mGuiScalar;
+        mGuiRenderer.mCamera.CalculateMatrices();
+        mGuiRenderer.mDimensions = glm::vec3{mWidth, mHeight, mGuiScalar};
+
+        // 4. Windowed: match the window client area to the new canvas.
+        if (s.mWindowMode == Graphics::WindowMode::Windowed)
+            glfwSetWindowSize(mWindow, static_cast<int>(mWidth), static_cast<int>(mHeight));
+
+        // 5. VSync.
+        glfwSwapInterval(s.mVSync ? 1 : 0);
+
+        // 6. Reflect into the in-memory config (UiScale stays the user's choice, not effScale)
+        //    and optionally persist.
+        auto& g = mConfig.mGraphics;
+        g.mUiScale = s.mUiScale;
+        g.mWindowMode = ToConfigMode(s.mWindowMode);
+        g.mMonitor = s.mMonitor;
+        g.mAutoScale = s.mAutoScale;
+        g.mVSync = s.mVSync;
+        if (persist && !mConfigPath.empty())
+            Config::WriteGraphicsConfig(mConfigPath, g);
+    }
+
+    GLFWwindow* mWindow;
+    std::optional<Graphics::CanvasFramebuffer>& mCanvas;
+    Graphics::GuiRenderer& mGuiRenderer;
+    Graphics::WindowManager& mWindowManager;
+    Config::Config& mConfig;
+    const std::string& mConfigPath;
+    float& mWidth;
+    float& mHeight;
+    float& mGuiScalar;
+    glm::vec2& mGuiScaleInv;
+    float mNativeWidth;
+    float mNativeHeight;
+};
+
 }
 
 Config::Config LoadConfigFile(std::string configPath, std::string& loadedPath)
@@ -361,9 +500,9 @@ int main(int argc, char** argv)
 
     // Offscreen logical canvas (320x200 * UiScale). The whole frame renders here, then is
     // blitted centered into the window with black letterbox bars (integer scale => pixel-exact).
-    auto canvas = Graphics::CanvasFramebuffer{
-        static_cast<unsigned>(width),
-        static_cast<unsigned>(height)};
+    // Held in an optional so a live UiScale change can rebuild it (see MainDisplayController).
+    std::optional<Graphics::CanvasFramebuffer> canvas;
+    canvas.emplace(static_cast<unsigned>(width), static_cast<unsigned>(height));
 
     auto spriteManager = Graphics::SpriteManager{};
     auto guiRenderer = Graphics::GuiRenderer{
@@ -415,6 +554,18 @@ int main(int argc, char** argv)
         sShadowDim,
         sShadowDim,
         config.mGraphics.mDrawDistance};
+
+    // The 3D pick framebuffer is fixed at the startup canvas resolution. A live UiScale change
+    // resizes the display canvas but NOT this buffer, so 3D-pick clicks are scaled back to it
+    // by (pickFbWidth / width).
+    const float pickFbWidth = width;
+
+    // Now that the window/canvas/renderer exist, expose a controller so the Preferences menu
+    // can apply display changes live. Captures the relevant locals by reference.
+    auto displayController = MainDisplayController{
+        window.get(), canvas, guiRenderer, windowManager, config, configPath,
+        width, height, guiScalar, guiScaleInv, nativeWidth, nativeHeight};
+    Gui::DisplayControllerProvider::Set(&displayController);
 
     Game::GameRunner gameRunner{
         camera,
@@ -553,26 +704,17 @@ int main(int argc, char** argv)
         if (!Gui::TextInput::AnyFocused())
             guiRenderer.ToggleCrossfade();
     });
-    // Alt+Enter: toggle borderless fullscreen <-> windowed (no GL context recreation), then
-    // persist the new window mode so it survives a restart.
-    const auto ToConfigWindowMode = [](Graphics::WindowMode m)
-    {
-        switch (m)
-        {
-            case Graphics::WindowMode::BorderlessFullscreen: return Config::WindowMode::BorderlessFullscreen;
-            case Graphics::WindowMode::ExclusiveFullscreen: return Config::WindowMode::ExclusiveFullscreen;
-            case Graphics::WindowMode::Windowed: return Config::WindowMode::Windowed;
-        }
-        return Config::WindowMode::Windowed;
-    };
+    // Alt+Enter: toggle borderless fullscreen <-> windowed via the display controller (live
+    // apply + persist; no GL context recreation).
     inputHandler.BindPress(GLFW_KEY_ENTER, [&]{
         if (glfwGetKey(window.get(), GLFW_KEY_LEFT_ALT) == GLFW_PRESS
             || glfwGetKey(window.get(), GLFW_KEY_RIGHT_ALT) == GLFW_PRESS)
         {
-            windowManager.ToggleFullscreen();
-            config.mGraphics.mWindowMode = ToConfigWindowMode(windowManager.GetMode());
-            if (!configPath.empty())
-                Config::WriteGraphicsConfig(configPath, config.mGraphics);
+            auto settings = displayController.GetCurrentSettings();
+            settings.mWindowMode = settings.mWindowMode == Graphics::WindowMode::Windowed
+                ? Graphics::WindowMode::BorderlessFullscreen
+                : Graphics::WindowMode::Windowed;
+            displayController.CommitSettings(settings);
         }
     });
     inputHandler.Bind(GLFW_KEY_BACKSPACE,   [&]{ if (root.OnKeyEvent(Gui::KeyPress{GLFW_KEY_BACKSPACE})){ ;} });
@@ -612,7 +754,9 @@ int main(int argc, char** argv)
                     gameRunner.mSystems->GetSprites(),
                     gameRunner.mSystems->GetDynamicRenderables(),
                     *cameraPtr);
-                const auto clickedId = renderer.GetClickedEntity(ToCanvasPx(clickPos));
+                // Scale the click back to the fixed-resolution pick buffer (see pickFbWidth).
+                const auto clickedId = renderer.GetClickedEntity(
+                    ToCanvasPx(clickPos) * (pickFbWidth / width));
                 if (gameRunner.IsGridVisible() && gameRunner.HandleGridCellClick(clickedId))
                 {
                 }
@@ -759,7 +903,7 @@ int main(int argc, char** argv)
 
             // The depth pass unbound to the default framebuffer; bind the offscreen canvas
             // for the main color pass (3D world + 2D GUI both render into it).
-            canvas.BindForDrawing();
+            canvas->BindForDrawing();
             // Dark blue background
             glClearColor(ambient * 0.15f, ambient * 0.31f, ambient * 0.36f, 0.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -796,7 +940,7 @@ int main(int argc, char** argv)
         else
         {
             // No 3D world (e.g. main menu): still render the GUI into the canvas.
-            canvas.BindForDrawing();
+            canvas->BindForDrawing();
             glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         }
@@ -809,7 +953,7 @@ int main(int argc, char** argv)
         // Drive the dest rect from the framebuffer size (DPI-safe), not the window size.
         int framebufferWidth{}, framebufferHeight{};
         glfwGetFramebufferSize(window.get(), &framebufferWidth, &framebufferHeight);
-        canvas.PresentToScreen(framebufferWidth, framebufferHeight);
+        canvas->PresentToScreen(framebufferWidth, framebufferHeight);
 
         // { *** IMGUI START ***
         if (showImgui)

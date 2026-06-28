@@ -12,6 +12,7 @@ add_library(gui
     colors.hpp
     compass.hpp compass.cpp
     contents.hpp contents.cpp
+    displaySettings.hpp displaySettings.cpp
     cursor.hpp cursor.cpp
     cutscenePlayer.hpp cutscenePlayer.cpp
     dialogDisplay.hpp dialogDisplay.cpp

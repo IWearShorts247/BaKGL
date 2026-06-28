@@ -280,6 +280,7 @@ void MainMenuScreen::AddMainMenu()
 
 void MainMenuScreen::AddPreferences()
 {
+    mPreferencesScreen.OnEnter();
     AddChildBack(&mPreferencesScreen);
 }
 
