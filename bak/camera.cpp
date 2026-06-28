@@ -55,11 +55,12 @@ void Camera::UseOrthoMatrix(unsigned width, unsigned height)
     mProjectionMatrix = CalculateOrthoMatrix(width, height);
 }
 
-void Camera::UseOrthoCentered(float halfExtent)
+void Camera::UseOrthoMap(float halfHeight, float aspect, float verticalShift)
 {
+    const float halfWidth = halfHeight * aspect;
     mProjectionMatrix = glm::ortho(
-        -halfExtent, halfExtent,
-        -halfExtent, halfExtent,
+        -halfWidth, halfWidth,
+        -halfHeight + verticalShift, halfHeight + verticalShift,
         1.0f, 4000.0f);
 }
 

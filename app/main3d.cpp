@@ -565,10 +565,15 @@ int main(int argc, char** argv)
     const auto UpdateMapCamera = [&]{
         const auto loc = camera.GetGameLocation();
         const auto partyGl = BAK::ToGlCoord<float>(loc.mPosition);
-        // Above the party, looking steeply down; party heading points up the screen.
-        mapCamera.SetPosition(glm::vec3{partyGl.x, 2000.0f, partyGl.z});
+        // Above the party, looking steeply (not fully) down so terrain reads slightly 3D, as
+        // in the original; party heading points up the screen.
+        mapCamera.SetPosition(glm::vec3{partyGl.x, 2500.0f, partyGl.z});
         mapCamera.SetAngle(glm::vec2{BAK::ToGlAngle(loc.mHeading).x, -1.45f});
-        mapCamera.UseOrthoCentered(guiManager.GetLocalMapHalfExtent());
+        const float halfHeight = guiManager.GetLocalMapHalfExtent();
+        const float aspect = nativeWidth / nativeHeight; // framebuffer is 16:10
+        // Shift the view up so the party sits in the frame's map window (upper area), not the
+        // framebuffer centre. Factor is provisional pending visual calibration.
+        mapCamera.UseOrthoMap(halfHeight, aspect, -0.37f * halfHeight);
     };
 
     guiManager.mMainView.SetHeading(camera.GetHeading());

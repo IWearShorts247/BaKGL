@@ -101,16 +101,18 @@ MainView::MainView(
         }
     }
 
-    // Local-map button bar (replaces the travel buttons in map mode). Positions are
-    // provisional pending a visual pass against the original.
+    // Local-map button bar (replaces the travel buttons in map mode). A 2x2 grid on the
+    // right, clear of the party portraits (which stay on the left), roughly where the
+    // original's round map-buttons sit. Text labels for now (the original uses round icon
+    // buttons); positions provisional pending a visual pass.
     mMapButtons.reserve(4);
-    mMapButtons.emplace_back(glm::vec2{8, 172}, glm::vec2{60, 14}, mGameFont,
+    mMapButtons.emplace_back(glm::vec2{182, 150}, glm::vec2{58, 14}, mGameFont,
         "#Zoom In", [this]{ mGuiManager.LocalMapZoomIn(); });
-    mMapButtons.emplace_back(glm::vec2{72, 172}, glm::vec2{60, 14}, mGameFont,
+    mMapButtons.emplace_back(glm::vec2{246, 150}, glm::vec2{58, 14}, mGameFont,
         "#Zoom Out", [this]{ mGuiManager.LocalMapZoomOut(); });
-    mMapButtons.emplace_back(glm::vec2{180, 172}, glm::vec2{60, 14}, mGameFont,
+    mMapButtons.emplace_back(glm::vec2{182, 170}, glm::vec2{58, 14}, mGameFont,
         "#Full Map", [this]{ mGuiManager.ShowFullMap(); });
-    mMapButtons.emplace_back(glm::vec2{244, 172}, glm::vec2{60, 14}, mGameFont,
+    mMapButtons.emplace_back(glm::vec2{246, 170}, glm::vec2{58, 14}, mGameFont,
         "#Main", [this]{ mGuiManager.EnterMainView(); });
 
     AddChildren();
