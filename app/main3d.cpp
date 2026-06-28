@@ -600,7 +600,7 @@ int main(int argc, char** argv)
         spriteManager.GetSpriteSheet(sheet).LoadTexturesGL(store);
         return sheet;
     });
-    constexpr auto sMarkerDims = glm::vec2{11, 11};
+    constexpr auto sMarkerDims = glm::vec2{13, 8}; // vertically squashed, like the original
     constexpr auto sMapWindowCentre = glm::vec2{160, 63}; // where the party sits in the frame
     auto mapMarker = Gui::Widget{
         Graphics::DrawMode::Sprite,
@@ -982,8 +982,13 @@ int main(int argc, char** argv)
             // The depth pass unbound to the default framebuffer; bind the offscreen canvas
             // for the main color pass (3D world + 2D GUI both render into it).
             canvas->BindForDrawing();
-            // Dark blue background
-            glClearColor(ambient * 0.15f, ambient * 0.31f, ambient * 0.36f, 0.0f);
+            if (localMap)
+                // Clear to terrain-green so gaps beyond the zone's tiles blend in, imitating the
+                // original's trick of covering void with oversized terrain polygons.
+                glClearColor(0.16f, 0.28f, 0.16f, 0.0f);
+            else
+                // Dark blue background
+                glClearColor(ambient * 0.15f, ambient * 0.31f, ambient * 0.36f, 0.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             renderer.DrawWithShadow(
                 gameRunner.GetZoneRenderData(),
@@ -1031,12 +1036,14 @@ int main(int argc, char** argv)
         if (guiManager.InLocalMapView())
         {
             const float northYaw = BAK::ToGlAngle(BAK::GameHeading{0}).x;
-            const float angle = camera.GetAngle().x - northYaw;
+            // Negated so the marker turns the same way as the party on the north-up map.
+            const float angle = -(camera.GetAngle().x - northYaw);
             const float c = std::cos(angle);
             const float s = std::sin(angle);
             const glm::vec2 half = sMarkerDims * 0.5f;
-            // Rotation pivots at the quad corner; offset so the marker stays centred.
-            const glm::vec2 rotatedHalf{half.x * c - half.y * s, half.x * s + half.y * c};
+            // guiRenderer's rotation matrix is column-major [[cos,sin],[-sin,cos]]; offset the
+            // corner-pivot position by R*half so the marker spins in place (centred), not orbits.
+            const glm::vec2 rotatedHalf{c * half.x + s * half.y, -s * half.x + c * half.y};
             mapMarker.SetPosition(sMapWindowCentre - rotatedHalf);
             mapMarker.SetRotation(angle);
             guiRenderer.RenderGui(&mapMarker);
