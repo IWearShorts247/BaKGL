@@ -577,6 +577,41 @@ int main(int argc, char** argv)
         mapCamera.UseOrthoMap(halfHeight, aspect, -0.37f * halfHeight);
     };
 
+    // Party marker for the local map: a small red triangle (no original asset) built
+    // procedurally and registered as its own sprite sheet. Drawn at the map-window centre,
+    // rotated to the party's facing (the map is north-up, so the marker shows direction).
+    const auto markerSheet = std::invoke([&]{
+        constexpr unsigned N = 16;
+        Graphics::Texture tri{N, N, N, N};
+        for (unsigned y = 0; y < N; ++y)
+            for (unsigned x = 0; x < N; ++x)
+            {
+                // Apex at top (north), widening to the base at the bottom.
+                const float t = static_cast<float>(y) / (N - 1);
+                const float halfW = t * (N / 2.0f);
+                const bool inside = std::abs((x + 0.5f) - (N / 2.0f)) <= halfW;
+                tri.SetPixel(x, y, inside
+                    ? glm::vec4{0.80f, 0.05f, 0.05f, 1.0f}
+                    : glm::vec4{0, 0, 0, 0});
+            }
+        Graphics::TextureStore store{};
+        store.AddTexture(tri);
+        const auto sheet = spriteManager.AddSpriteSheet();
+        spriteManager.GetSpriteSheet(sheet).LoadTexturesGL(store);
+        return sheet;
+    });
+    constexpr auto sMarkerDims = glm::vec2{11, 11};
+    constexpr auto sMapWindowCentre = glm::vec2{160, 63}; // where the party sits in the frame
+    auto mapMarker = Gui::Widget{
+        Graphics::DrawMode::Sprite,
+        markerSheet,
+        Graphics::TextureIndex{0},
+        Graphics::ColorMode::Texture,
+        glm::vec4{1},
+        sMapWindowCentre,
+        sMarkerDims,
+        false};
+
     guiManager.mMainView.SetHeading(camera.GetHeading());
 
     // OpenGL 3D Renderer
@@ -991,6 +1026,21 @@ int main(int argc, char** argv)
         //// { *** Draw 2D GUI ***
         guiRenderer.UpdateCrossfade(static_cast<float>(deltaTime));
         guiRenderer.RenderGui(&root);
+
+        // Party marker overlay on the local map (north-up): rotate to the party's facing.
+        if (guiManager.InLocalMapView())
+        {
+            const float northYaw = BAK::ToGlAngle(BAK::GameHeading{0}).x;
+            const float angle = camera.GetAngle().x - northYaw;
+            const float c = std::cos(angle);
+            const float s = std::sin(angle);
+            const glm::vec2 half = sMarkerDims * 0.5f;
+            // Rotation pivots at the quad corner; offset so the marker stays centred.
+            const glm::vec2 rotatedHalf{half.x * c - half.y * s, half.x * s + half.y * c};
+            mapMarker.SetPosition(sMapWindowCentre - rotatedHalf);
+            mapMarker.SetRotation(angle);
+            guiRenderer.RenderGui(&mapMarker);
+        }
 
         // Present the canvas: blit centered into the window with black letterbox bars.
         // Drive the dest rect from the framebuffer size (DPI-safe), not the window size.
