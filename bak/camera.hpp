@@ -17,6 +17,9 @@ public:
     glm::mat4 CalculateOrthoMatrix(unsigned width, unsigned height);
     glm::mat4 CalculatePerspectiveMatrix(unsigned width, unsigned height);
     void UseOrthoMatrix(unsigned width, unsigned height);
+    // Symmetric top-down orthographic projection (half-extent in world units), for the
+    // local map view. Generous near/far so a high camera doesn't clip the terrain.
+    void UseOrthoCentered(float halfExtent);
     void UsePerspectiveMatrix(unsigned width, unsigned height);
 
     void SetGameLocation(const BAK::GamePositionAndHeading& location);

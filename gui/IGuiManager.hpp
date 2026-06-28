@@ -48,6 +48,12 @@ public:
     virtual void ShowCamp(bool isInn, BAK::ShopStats* inn) = 0;
     virtual void ShowCast(bool inCombat) = 0;
     virtual void ShowFullMap() = 0;
+    // Local "map of the party's immediate surroundings" (top-down), shown before the full map.
+    virtual void EnterLocalMap() = 0;
+    virtual bool InLocalMapView() const = 0;
+    virtual void LocalMapZoomIn() = 0;
+    virtual void LocalMapZoomOut() = 0;
+    virtual float GetLocalMapHalfExtent() const = 0;
     virtual void ToggleFollowRoad() = 0;
     virtual void ShowGameStartMap() = 0;
     virtual void ShowTeleport(unsigned sourceTemple, BAK::ShopStats* temple) = 0;

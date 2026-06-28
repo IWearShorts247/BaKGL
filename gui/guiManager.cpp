@@ -247,9 +247,39 @@ bool GuiManager::InCombatView() const
     return mScreenStack.size() > 0 && mScreenStack.Top() == &mCombatScreen;
 }
 
+bool GuiManager::InLocalMapView() const
+{
+    return mInLocalMap && InMainView();
+}
+
+void GuiManager::EnterLocalMap()
+{
+    mLogger.Info() << "Entering local map\n";
+    mInLocalMap = true;
+    mMainView.SetMapMode(true);
+    mMainView.SetCanSaveBookmark(mMainMenu.CanSaveBookmark());
+    mMainView.UpdatePartyMembers(mGameState);
+    DoFade(1.0, [this]{
+        auto checkMainView = PopScreen();
+        PushScreen(&mMainView);
+    });
+}
+
+void GuiManager::LocalMapZoomIn()
+{
+    mLocalMapHalfExtent = std::max(mLocalMapHalfExtent * 0.5f, 350.0f);
+}
+
+void GuiManager::LocalMapZoomOut()
+{
+    mLocalMapHalfExtent = std::min(mLocalMapHalfExtent * 2.0f, 5600.0f);
+}
+
 void GuiManager::EnterMainView()
 {
     mLogger.Info() << "Entering main view\n";
+    mInLocalMap = false;
+    mMainView.SetMapMode(false);
     mMainView.SetCanSaveBookmark(mMainMenu.CanSaveBookmark());
     mMainView.UpdatePartyMembers(mGameState);
     DoFade(1.0, [this]{

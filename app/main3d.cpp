@@ -554,6 +554,23 @@ int main(int argc, char** argv)
         1.0f};
     Camera* cameraPtr = &camera;
 
+    // Top-down camera for the local map view (overhead ortho over the party). Positioned and
+    // zoomed each frame from the party's location while InLocalMapView(). Framing/zoom are a
+    // first pass pending a visual calibration against the original.
+    Camera mapCamera{
+        static_cast<unsigned>(width),
+        static_cast<unsigned>(height),
+        400 * 30.0f,
+        1.0f};
+    const auto UpdateMapCamera = [&]{
+        const auto loc = camera.GetGameLocation();
+        const auto partyGl = BAK::ToGlCoord<float>(loc.mPosition);
+        // Above the party, looking steeply down; party heading points up the screen.
+        mapCamera.SetPosition(glm::vec3{partyGl.x, 2000.0f, partyGl.z});
+        mapCamera.SetAngle(glm::vec2{BAK::ToGlAngle(loc.mHeading).x, -1.45f});
+        mapCamera.UseOrthoCentered(guiManager.GetLocalMapHalfExtent());
+    };
+
     guiManager.mMainView.SetHeading(camera.GetHeading());
 
     // OpenGL 3D Renderer
@@ -871,8 +888,13 @@ int main(int argc, char** argv)
             // { *** Draw 3D World ***
             UpdateLightCamera();
 
+            // In the local map view, render the zone from a top-down camera over the party.
+            const bool localMap = guiManager.InLocalMapView();
+            if (localMap) UpdateMapCamera();
+            Camera& renderCamera = localMap ? mapCamera : *cameraPtr;
+
             glEnable(GL_BLEND);
-            glEnable(GL_MULTISAMPLE);  
+            glEnable(GL_MULTISAMPLE);
 
             double bakTimeOfDay = (gameState.GetWorldTime().GetTime().mTime % 43200);
             auto twoPi = std::numbers::pi_v<double> * 2.0;
@@ -923,7 +945,7 @@ int main(int argc, char** argv)
                 gameRunner.mSystems->GetRenderables(),
                 light,
                 lightCamera,
-                *cameraPtr,
+                renderCamera,
                 false);
 
             renderer.DrawWithShadow(
@@ -931,7 +953,7 @@ int main(int argc, char** argv)
                 gameRunner.mSystems->GetSprites(),
                 light,
                 lightCamera,
-                *cameraPtr,
+                renderCamera,
                 true);
 
             const auto& dynamicRenderables = gameRunner.mSystems->GetDynamicRenderables();
@@ -944,7 +966,7 @@ int main(int argc, char** argv)
                     data,
                     light,
                     lightCamera,
-                    *cameraPtr,
+                    renderCamera,
                     true);
             }
         }

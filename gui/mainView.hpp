@@ -54,6 +54,9 @@ public:
     void ShowPortrait(BAK::ActiveCharIndex character);
     void ShowInventory(BAK::ActiveCharIndex character);
     void SetCanSaveBookmark(bool can);
+    // Swap the bottom button bar between travel buttons and the local-map buttons
+    // (Zoom In / Zoom Out / Full Map / Main).
+    void SetMapMode(bool mapMode);
     [[nodiscard]] bool OnMouseEvent(const MouseEvent& event) override;
 private:
     void AddChildren();
@@ -69,6 +72,9 @@ private:
     Compass mCompass;
     std::vector<ClickButtonImage> mButtons;
     std::vector<ClickButtonImage> mCharacters;
+
+    bool mMapMode{false};
+    std::vector<ClickButton> mMapButtons;
 
     bool mCanSaveBookmark{false};
     bool mShowingBookmarkDialog{false};

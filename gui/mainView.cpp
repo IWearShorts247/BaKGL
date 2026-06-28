@@ -101,6 +101,24 @@ MainView::MainView(
         }
     }
 
+    // Local-map button bar (replaces the travel buttons in map mode). Positions are
+    // provisional pending a visual pass against the original.
+    mMapButtons.reserve(4);
+    mMapButtons.emplace_back(glm::vec2{8, 172}, glm::vec2{60, 14}, mGameFont,
+        "#Zoom In", [this]{ mGuiManager.LocalMapZoomIn(); });
+    mMapButtons.emplace_back(glm::vec2{72, 172}, glm::vec2{60, 14}, mGameFont,
+        "#Zoom Out", [this]{ mGuiManager.LocalMapZoomOut(); });
+    mMapButtons.emplace_back(glm::vec2{180, 172}, glm::vec2{60, 14}, mGameFont,
+        "#Full Map", [this]{ mGuiManager.ShowFullMap(); });
+    mMapButtons.emplace_back(glm::vec2{244, 172}, glm::vec2{60, 14}, mGameFont,
+        "#Main", [this]{ mGuiManager.EnterMainView(); });
+
+    AddChildren();
+}
+
+void MainView::SetMapMode(bool mapMode)
+{
+    mMapMode = mapMode;
     AddChildren();
 }
 
@@ -120,7 +138,9 @@ void MainView::HandleButton(unsigned buttonIndex)
         mGuiManager.ShowCamp(false, nullptr);
         break;
     case sFullMap:
-        mGuiManager.ShowFullMap();
+        // The map icon now opens the local "immediate surroundings" map first; the kingdom
+        // map is reached from there via the Full Map button.
+        mGuiManager.EnterLocalMap();
         break;
     case sSnapToRoad:
         mGuiManager.ToggleFollowRoad();
@@ -252,11 +272,19 @@ void MainView::ShowInventory(BAK::ActiveCharIndex character)
 void MainView::AddChildren()
 {
     ClearChildren();
-    for (unsigned i = 0; i < mButtons.size(); i++)
+    if (mMapMode)
     {
-        if (i == sBookmark && !mCanSaveBookmark)
-            continue;
-        AddChildBack(&mButtons[i]);
+        for (auto& button : mMapButtons)
+            AddChildBack(&button);
+    }
+    else
+    {
+        for (unsigned i = 0; i < mButtons.size(); i++)
+        {
+            if (i == sBookmark && !mCanSaveBookmark)
+                continue;
+            AddChildBack(&mButtons[i]);
+        }
     }
     for (auto& spell : mActiveSpells)
     {

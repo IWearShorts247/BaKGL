@@ -81,7 +81,12 @@ public:
     void CutsceneFinished();
     bool InMainView() const override;
     bool InCombatView() const override;
+    bool InLocalMapView() const override;
     void EnterMainView() override;
+    void EnterLocalMap() override;
+    void LocalMapZoomIn() override;
+    void LocalMapZoomOut() override;
+    float GetLocalMapHalfExtent() const override { return mLocalMapHalfExtent; }
     void EnterMainMenu(bool gameRunning) override;
     void PartyDied(BAK::Target dialog) override;
 
@@ -182,6 +187,9 @@ private:
     TeleportScreen mTeleportScreen;
     FadeScreen mFadeScreen;
     bool mDebugDisableFades{false};
+    bool mInLocalMap{false};
+    // Half-extent (world units) of the local-map ortho view; Zoom In/Out scale it.
+    float mLocalMapHalfExtent{1400.0f};
     std::vector<std::function<void()>> mFadeFunction;
     std::function<void()> mEndFadeFunction;
     std::function<void()> mCutsceneFinished;
