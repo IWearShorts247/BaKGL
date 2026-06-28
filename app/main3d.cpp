@@ -612,6 +612,46 @@ int main(int argc, char** argv)
         sMarkerDims,
         false};
 
+    // Local-map void filler: a faceted ground layer drawn under the zone so gaps beyond the
+    // zone's tiles read as big shaded terrain polygons (like the original) rather than flat
+    // colour. A static flat grid (normalised world units) offset to the party each frame;
+    // the shader hashes world position for per-vertex height so facets stay world-stable.
+    constexpr float sMapGroundCell = 80.0f;
+    auto mapGroundShader = std::invoke([]{
+        auto shader = ShaderProgram{"mapground.vert.glsl", "mapground.frag.glsl"};
+        return shader.Compile();
+    });
+    const auto mgVP = mapGroundShader.GetUniformLocation("VP");
+    const auto mgPartyOffset = mapGroundShader.GetUniformLocation("partyOffset");
+    const auto mgCell = mapGroundShader.GetUniformLocation("cell");
+    const auto mgAmp = mapGroundShader.GetUniformLocation("amp");
+    const auto mgBaseY = mapGroundShader.GetUniformLocation("baseY");
+    const auto mgLightDir = mapGroundShader.GetUniformLocation("lightDir");
+    const auto mgBaseColor = mapGroundShader.GetUniformLocation("baseColor");
+    const auto mapGround = std::invoke([&]{
+        std::vector<glm::vec2> verts{};
+        constexpr int halfCells = 12; // grid spans +/- 960 normalised, covers the widest zoom
+        for (int i = -halfCells; i < halfCells; ++i)
+            for (int j = -halfCells; j < halfCells; ++j)
+            {
+                const glm::vec2 a{i * sMapGroundCell, j * sMapGroundCell};
+                const glm::vec2 b{(i + 1) * sMapGroundCell, j * sMapGroundCell};
+                const glm::vec2 c{(i + 1) * sMapGroundCell, (j + 1) * sMapGroundCell};
+                const glm::vec2 d{i * sMapGroundCell, (j + 1) * sMapGroundCell};
+                verts.insert(verts.end(), {a, b, c, a, c, d});
+            }
+        GLuint vao{}, vbo{};
+        glGenVertexArrays(1, &vao);
+        glGenBuffers(1, &vbo);
+        glBindVertexArray(vao);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(glm::vec2), verts.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(glm::vec2), nullptr);
+        glBindVertexArray(0);
+        return std::make_pair(vao, static_cast<GLsizei>(verts.size()));
+    });
+
     guiManager.mMainView.SetHeading(camera.GetHeading());
 
     // OpenGL 3D Renderer
@@ -983,13 +1023,40 @@ int main(int argc, char** argv)
             // for the main color pass (3D world + 2D GUI both render into it).
             canvas->BindForDrawing();
             if (localMap)
-                // Clear to terrain-green so gaps beyond the zone's tiles blend in, imitating the
-                // original's trick of covering void with oversized terrain polygons.
+                // Terrain-green, as a fallback behind the faceted ground filler below.
                 glClearColor(0.16f, 0.28f, 0.16f, 0.0f);
             else
                 // Dark blue background
                 glClearColor(ambient * 0.15f, ambient * 0.31f, ambient * 0.36f, 0.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            // Local map: draw the faceted ground filler first, beneath the live zone, so gaps
+            // beyond the zone's tiles show big shaded polygons instead of flat colour. Pushed
+            // well below ground (baseY) so the real terrain always wins the depth test on top.
+            if (localMap)
+            {
+                const auto pgl = BAK::ToGlCoord<float>(camera.GetGameLocation().mPosition);
+                const glm::vec2 partyN{pgl.x / BAK::gWorldScale, pgl.z / BAK::gWorldScale};
+                const glm::vec2 snapped{
+                    std::round(partyN.x / sMapGroundCell) * sMapGroundCell,
+                    std::round(partyN.y / sMapGroundCell) * sMapGroundCell};
+                glEnable(GL_DEPTH_TEST);
+                glDepthMask(GL_TRUE);
+                glDisable(GL_BLEND);
+                mapGroundShader.UseProgramGL();
+                ShaderProgramHandle::SetUniform(mgVP,
+                    mapCamera.GetProjectionMatrix() * mapCamera.GetViewMatrix());
+                glUniform2f(mgPartyOffset, snapped.x, snapped.y);
+                ShaderProgramHandle::SetUniform(mgCell, Float{sMapGroundCell});
+                ShaderProgramHandle::SetUniform(mgAmp, Float{30.0f});
+                ShaderProgramHandle::SetUniform(mgBaseY, Float{-80.0f});
+                ShaderProgramHandle::SetUniform(mgLightDir, glm::normalize(light.mDirection));
+                ShaderProgramHandle::SetUniform(mgBaseColor, glm::vec3{0.20f, 0.34f, 0.18f});
+                glBindVertexArray(mapGround.first);
+                glDrawArrays(GL_TRIANGLES, 0, mapGround.second);
+                glBindVertexArray(0);
+            }
+
             renderer.DrawWithShadow(
                 gameRunner.GetZoneRenderData(),
                 gameRunner.mSystems->GetRenderables(),

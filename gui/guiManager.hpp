@@ -129,6 +129,7 @@ public:
     void ShowCast(bool inCombat) override;
     void ShowFullMap() override;
     void ToggleFollowRoad() override;
+    bool IsFollowingRoad() const override;
     void ShowGameStartMap() override;
     void ShowCureScreen(
         unsigned templeNumber,

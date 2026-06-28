@@ -112,7 +112,8 @@ MainView::MainView(
         mMapIconButtons.back().CenterImage(std::get<glm::vec2>(icons.GetButton(image)));
     };
     mMapIconButtons.reserve(6);
-    addMapIcon({200, 130}, 22, [this]{ mGuiManager.ToggleFollowRoad(); });
+    addMapIcon({200, 130}, 22,
+        [this]{ mGuiManager.ToggleFollowRoad(); UpdateFollowRoadIcon(); });
     addMapIcon({237, 130}, 10, [this]{ mGuiManager.LocalMapZoomOut(); });
     addMapIcon({273, 130},  7, [this]{ mGuiManager.ShowCamp(false, nullptr); });
     addMapIcon({200, 164}, 12, [this]{ mGuiManager.ShowFullMap(); });
@@ -125,7 +126,18 @@ MainView::MainView(
 void MainView::SetMapMode(bool mapMode)
 {
     mMapMode = mapMode;
+    if (mapMode)
+        UpdateFollowRoadIcon();
     AddChildren();
+}
+
+void MainView::UpdateFollowRoadIcon()
+{
+    // Follow Road is the first map-bar button; show the "on" icon (BICONS1 23) while
+    // road-following is active, otherwise the "off" icon (22).
+    if (mMapIconButtons.empty()) return;
+    const auto textures = mIcons.GetButtonTextures(mGuiManager.IsFollowingRoad() ? 23 : 22);
+    mMapIconButtons.front().SetTexture(textures.mSpriteSheet, textures.mNormal);
 }
 
 void MainView::SetHeading(BAK::GameHeading heading)

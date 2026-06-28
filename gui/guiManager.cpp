@@ -673,6 +673,11 @@ void GuiManager::ToggleFollowRoad()
         mZoneLoader->ToggleFollowRoad();
 }
 
+bool GuiManager::IsFollowingRoad() const
+{
+    return mZoneLoader && mZoneLoader->IsFollowingRoad();
+}
+
 void GuiManager::ShowGameStartMap()
 {
     DoFade(1.0, [this]{

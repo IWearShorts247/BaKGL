@@ -60,7 +60,7 @@ public:
     // --- Road auto-following ---
     void ToggleFollowRoad() override;        // snap onto / off the nearest road (HUD button)
     void FollowRoadStep(bool forward);       // advance one road segment (forward = movement input)
-    bool IsFollowingRoad() const { return mFollowingRoad; }
+    bool IsFollowingRoad() const override { return mFollowingRoad; }
 
     void LoadZoneData(BAK::ZoneNumber zone);
     void DoTransition(

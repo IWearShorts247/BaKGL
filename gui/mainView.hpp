@@ -60,6 +60,7 @@ public:
     [[nodiscard]] bool OnMouseEvent(const MouseEvent& event) override;
 private:
     void AddChildren();
+    void UpdateFollowRoadIcon();
 
     IGuiManager& mGuiManager;
     const Icons& mIcons;

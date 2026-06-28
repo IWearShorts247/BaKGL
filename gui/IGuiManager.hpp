@@ -55,6 +55,7 @@ public:
     virtual void LocalMapZoomOut() = 0;
     virtual float GetLocalMapHalfExtent() const = 0;
     virtual void ToggleFollowRoad() = 0;
+    virtual bool IsFollowingRoad() const = 0;
     virtual void ShowGameStartMap() = 0;
     virtual void ShowTeleport(unsigned sourceTemple, BAK::ShopStats* temple) = 0;
     virtual void ShowCureScreen(

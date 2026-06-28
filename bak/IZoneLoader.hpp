@@ -15,6 +15,7 @@ public:
     virtual void LoadGame(std::string, std::optional<Chapter>) = 0;
     // Toggle road auto-following (HUD "snap to road" button). Default no-op.
     virtual void ToggleFollowRoad() {}
+    virtual bool IsFollowingRoad() const { return false; }
 };
 
 }
