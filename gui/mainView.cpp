@@ -101,26 +101,23 @@ MainView::MainView(
         }
     }
 
-    // Local-map button bar (replaces the travel buttons in map mode), on the right, clear of
-    // the party portraits. Zoom In/Out use the original's round BICONS1 icons (10/11, the
-    // user's upscaled assets override these); Full Map and Main are text for now. Positions
-    // provisional pending a visual pass.
+    // Local-map button bar (replaces the travel buttons in map mode), matching the original's
+    // REQ_MAP.DAT layout: a 2x3 grid of round BICONS1 buttons (all 34x29). Image indices and
+    // positions are taken straight from REQ_MAP.DAT; the user's upscaled BICONS1_10/_11
+    // override the zoom icons.
+    const auto addMapIcon = [&](glm::vec2 pos, unsigned image, std::function<void()> cb)
     {
-        const auto zoomInDims = std::get<glm::vec2>(icons.GetButton(10));
-        const auto zoomOutDims = std::get<glm::vec2>(icons.GetButton(11));
-        mMapIconButtons.reserve(2);
-        mMapIconButtons.emplace_back(glm::vec2{188, 144}, zoomInDims,
-            icons.GetButtonTextures(10), [this]{ mGuiManager.LocalMapZoomIn(); }, []{});
-        mMapIconButtons.back().CenterImage(zoomInDims);
-        mMapIconButtons.emplace_back(glm::vec2{224, 144}, zoomOutDims,
-            icons.GetButtonTextures(11), [this]{ mGuiManager.LocalMapZoomOut(); }, []{});
-        mMapIconButtons.back().CenterImage(zoomOutDims);
-    }
-    mMapButtons.reserve(2);
-    mMapButtons.emplace_back(glm::vec2{182, 170}, glm::vec2{58, 14}, mGameFont,
-        "#Full Map", [this]{ mGuiManager.ShowFullMap(); });
-    mMapButtons.emplace_back(glm::vec2{246, 170}, glm::vec2{58, 14}, mGameFont,
-        "#Main", [this]{ mGuiManager.EnterMainView(); });
+        mMapIconButtons.emplace_back(
+            pos, glm::vec2{34, 29}, icons.GetButtonTextures(image), std::move(cb), []{});
+        mMapIconButtons.back().CenterImage(std::get<glm::vec2>(icons.GetButton(image)));
+    };
+    mMapIconButtons.reserve(6);
+    addMapIcon({200, 130}, 22, [this]{ mGuiManager.ToggleFollowRoad(); });
+    addMapIcon({237, 130}, 10, [this]{ mGuiManager.LocalMapZoomIn(); });
+    addMapIcon({273, 130},  7, [this]{ mGuiManager.ShowCamp(false, nullptr); });
+    addMapIcon({200, 164}, 12, [this]{ mGuiManager.ShowFullMap(); });
+    addMapIcon({236, 164}, 11, [this]{ mGuiManager.LocalMapZoomOut(); });
+    addMapIcon({273, 164}, 61, [this]{ mGuiManager.EnterMainView(); });
 
     AddChildren();
 }
@@ -284,8 +281,6 @@ void MainView::AddChildren()
     if (mMapMode)
     {
         for (auto& button : mMapIconButtons)
-            AddChildBack(&button);
-        for (auto& button : mMapButtons)
             AddChildBack(&button);
     }
     else
